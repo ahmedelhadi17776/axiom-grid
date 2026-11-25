@@ -15,6 +15,8 @@ import type {
   SimMetrics,
   StacksQueuesWorldState,
   TimelineState,
+  TreesWorldState,
+  TreeTraversalOrder,
   WorldId,
 } from '../engine/types';
 import { compareRanks, createEmptyMetrics } from '../engine/scorer';
@@ -35,7 +37,9 @@ import {
   cloneWorldState,
   createArraysSession,
   createPathfindingSession,
+  createTreesSession,
   evaluateLevel,
+  recomputeTreeLayoutAndMetrics,
 } from '../engine/worlds/index';
 import {
   ALL_LEVELS,
@@ -76,17 +80,27 @@ export function playAudioForEvent(event: SimEvent | null): void {
   switch (event.type) {
     case 'SWAP':
     case 'WRITE':
+    case 'ROTATE_LEFT':
+    case 'ROTATE_RIGHT':
       soundEngine.playSwap(event.pitchHint ?? 0.5);
       break;
     case 'LINK':
     case 'UNLINK':
+    case 'INSERT_NODE':
       soundEngine.playLink();
+      break;
+    case 'PROBE':
+      soundEngine.playStep(event.pitchHint ?? 0.65);
+      break;
+    case 'DELETE_NODE':
+      soundEngine.playStep(event.pitchHint ?? 0.3);
       break;
     case 'MEMORY_LEAK':
     case 'NULL_DEREF':
     case 'OVERFLOW':
     case 'UNDERFLOW':
     case 'BOUNDS_FAULT':
+    case 'INVARIANT_FAULT':
     case 'NO_PATH':
     case 'FAIL':
       soundEngine.playError();
@@ -106,7 +120,7 @@ export function playAudioForEvent(event: SimEvent | null): void {
 const DEFAULT_LEVEL: LevelDefinition = ALL_LEVELS[0];
 
 const SANDBOX_STARTER_CODE: Record<WorldId, string> = {
-  arrays: `// Sandbox Arrays API: api.length, api.get(i), api.compare(i, j), api.swap(i, j)
+  arrays: `// Sandbox Arrays API: api.length, api.get(i), api.compare(i, j), api.swap(i, j), api.probe(i)
 for (let i = 0; i < api.length - 1; i++) {
   for (let j = 0; j < api.length - i - 1; j++) {
     if (api.compare(j, j + 1) > 0) {
@@ -127,10 +141,15 @@ while (api.size('stackA') > 0) {
   api.emit('stackA');
 }
 `,
-  pathfinding: `// Sandbox Pathfinding API: api.setAlgorithm('bfs'|'dijkstra'|'astar'), api.setWall(x,y,b), api.runSearch()
+  pathfinding: `// Sandbox Pathfinding API: api.setAlgorithm('bfs'|'dfs'|'dijkstra'|'greedy'|'astar'|'bidirectional'), api.runSearch()
 api.setAlgorithm('astar');
 const res = api.runSearch();
 console.log('Path cost:', res.pathCost, 'Visited:', res.visitedCount);
+`,
+  trees: `// Sandbox Trees API: api.root(), api.getNode(id), api.insert(val), api.deleteNode(id), api.rotateLeft(id), api.runTraversal(order)
+api.insert(42);
+const sorted = api.runTraversal('inorder');
+console.log('In-order harvest:', sorted.join(', '));
 `,
 };
 
@@ -240,7 +259,42 @@ function createRandomPathfindingState(
   return next;
 }
 
-const PACKET_COLORS = ['#00F0FF', '#FFB800', '#00FF9D', '#A855F7', '#FF2A5F'];
+const PACKET_COLORS = ['#38BDF8', '#FBBF24', '#34D399', '#A78BFA', '#FB7185', '#2DD4BF'];
+
+function createRandomTreesState(): TreesWorldState {
+  const count = 6 + Math.floor(Math.random() * 2); // 6–7 nodes
+  const used = new Set<number>();
+  const values: number[] = [];
+  while (values.length < count) {
+    const v = 12 + Math.floor(Math.random() * 83);
+    if (!used.has(v)) {
+      used.add(v);
+      values.push(v);
+    }
+  }
+  const emptyState: TreesWorldState = {
+    world: 'trees',
+    mode: 'sandbox',
+    nodes: {},
+    rootId: null,
+    selectedNodeId: null,
+    pendingQueue: [],
+    visitedSequence: [],
+    showBalanceFactors: true,
+    invariantViolations: 0,
+  };
+  const session = createTreesSession(emptyState);
+  for (const val of values) {
+    session.insert(val);
+  }
+  const nextState = session.getState();
+  for (const node of Object.values(nextState.nodes)) {
+    node.highlighted = false;
+    node.visitedOrder = undefined;
+  }
+  recomputeTreeLayoutAndMetrics(nextState);
+  return nextState;
+}
 
 export interface GameStoreState {
   // Navigation
@@ -270,6 +324,7 @@ export interface GameStoreState {
   isRunningCode: boolean;
   codeDrawerOpen: boolean;
   pseudocodeOpen: boolean;
+  hintStep: number;
   resetCameraSignal: number;
   pathPaintTool: PathPaintTool;
   statusToast: StatusToast | null;
@@ -304,6 +359,8 @@ export interface GameStoreState {
   loadReferenceSolution: () => void;
   setCodeDrawerOpen: (open: boolean) => void;
   setPseudocodeOpen: (open: boolean) => void;
+  revealNextHint: () => void;
+  hideHints: () => void;
   triggerResetCamera: () => void;
   setPathPaintTool: (tool: PathPaintTool) => void;
   dismissVictoryModal: () => void;
@@ -324,6 +381,9 @@ export interface GameStoreState {
   sandboxAddLinkedNode: () => void;
   sandboxToggleLinkedCycle: () => void;
   sandboxAddPacket: () => void;
+  sandboxInsertTreeKey: (value?: number) => void;
+  sandboxRunTreeTraversal: (order: TreeTraversalOrder) => void;
+  sandboxAutoBalanceTree: () => void;
   isLevelUnlocked: (levelId: string) => boolean;
 }
 
@@ -353,6 +413,7 @@ export const useGameStore = create<GameStoreState>()(
       isRunningCode: false,
       codeDrawerOpen: false,
       pseudocodeOpen: true,
+      hintStep: 0,
       resetCameraSignal: 0,
       pathPaintTool: 'wall',
       statusToast: null,
@@ -369,6 +430,7 @@ export const useGameStore = create<GameStoreState>()(
           timeline: setTimelinePlaying(s.timeline, false),
           scoreReport: null,
           pendingScoreReport: null,
+          hintStep: 0,
           statusToast: null,
         }));
       },
@@ -380,6 +442,7 @@ export const useGameStore = create<GameStoreState>()(
           timeline: setTimelinePlaying(s.timeline, false),
           scoreReport: null,
           pendingScoreReport: null,
+          hintStep: 0,
           statusToast: null,
         }));
       },
@@ -404,6 +467,7 @@ export const useGameStore = create<GameStoreState>()(
           codeLogs: [],
           codeError: null,
           isRunningCode: false,
+          hintStep: 0,
           pathComparison: null,
           statusToast: null,
           resetCameraSignal: s.resetCameraSignal + 1,
@@ -543,7 +607,8 @@ export const useGameStore = create<GameStoreState>()(
               lastEvent.type === 'NULL_DEREF' ||
               lastEvent.type === 'OVERFLOW' ||
               lastEvent.type === 'UNDERFLOW' ||
-              lastEvent.type === 'BOUNDS_FAULT')
+              lastEvent.type === 'BOUNDS_FAULT' ||
+              lastEvent.type === 'INVARIANT_FAULT')
           ) {
             toast = { message: lastEvent.label, tone: 'error' };
           }
@@ -892,6 +957,7 @@ export const useGameStore = create<GameStoreState>()(
           victoryDismissed: false,
           codeError: null,
           codeLogs: [],
+          hintStep: 0,
           statusToast: null,
         });
       },
@@ -942,6 +1008,22 @@ export const useGameStore = create<GameStoreState>()(
       setPseudocodeOpen: (open: boolean) => {
         soundEngine.playSelect();
         set({ pseudocodeOpen: open });
+      },
+
+      revealNextHint: () => {
+        const state = get();
+        const level = getLevelById(state.activeLevelId);
+        const maxHints = level?.hints?.length ?? 0;
+        if (maxHints === 0) return;
+        soundEngine.playSelect();
+        set((s) => ({
+          hintStep: Math.min(maxHints, s.hintStep + 1),
+        }));
+      },
+
+      hideHints: () => {
+        soundEngine.playSelect();
+        set({ hintStep: 0 });
       },
 
       triggerResetCamera: () => {
@@ -1084,6 +1166,8 @@ export const useGameStore = create<GameStoreState>()(
             cursors: { slow: 'n1', fast: 'n1' },
             hasCycle: false,
           };
+        } else if (world === 'trees') {
+          nextState = createRandomTreesState();
         } else {
           const base = cloneWorldState(
             SANDBOX_DEFAULTS['stacks-queues'] as StacksQueuesWorldState
@@ -1306,6 +1390,140 @@ export const useGameStore = create<GameStoreState>()(
             speed: s.timeline.speed,
           }),
         }));
+      },
+
+      sandboxInsertTreeKey: (value?: number) => {
+        const state = get();
+        const current = getCurrentState(state.timeline);
+        if (current.world !== 'trees') return;
+
+        const existingValues = new Set(
+          Object.values(current.nodes).map((n) => n.value)
+        );
+        if (existingValues.size >= 15) {
+          soundEngine.playError();
+          set({
+            statusToast: {
+              message: 'Max 15 nodes in Tree Sandbox.',
+              tone: 'info',
+            },
+          });
+          return;
+        }
+
+        let key =
+          typeof value === 'number' && Number.isFinite(value)
+            ? Math.round(value)
+            : NaN;
+
+        if (!Number.isFinite(key)) {
+          for (let attempt = 0; attempt < 120; attempt++) {
+            const candidate = 10 + Math.floor(Math.random() * 86);
+            if (!existingValues.has(candidate)) {
+              key = candidate;
+              break;
+            }
+          }
+        }
+
+        if (!Number.isFinite(key) || existingValues.has(key)) {
+          soundEngine.playError();
+          set({
+            statusToast: {
+              message: `Key ${key} already exists in BST.`,
+              tone: 'info',
+            },
+          });
+          return;
+        }
+
+        soundEngine.playSelect();
+        const initial = cloneWorldState(current);
+        const session = createTreesSession(initial);
+        session.insert(key);
+        const events = session.getEvents();
+        const finalState = session.getState();
+
+        set({
+          sandboxState: cloneWorldState(finalState),
+          timeline: createTimeline<AnyWorldState>(initial, events, {
+            speed: state.timeline.speed,
+            isPlaying: events.length > 0,
+            startCursor: -1,
+          }),
+          metrics: createEmptyMetrics(),
+          statusToast: null,
+        });
+      },
+
+      sandboxRunTreeTraversal: (order: TreeTraversalOrder) => {
+        const state = get();
+        const current = getCurrentState(state.timeline);
+        if (current.world !== 'trees') return;
+        if (!current.rootId) {
+          soundEngine.playError();
+          set({
+            statusToast: { message: 'Tree is empty.', tone: 'info' },
+          });
+          return;
+        }
+
+        soundEngine.playSelect();
+        const cleanStart = cloneWorldState(current);
+        cleanStart.visitedSequence = [];
+        for (const node of Object.values(cleanStart.nodes)) {
+          node.visitedOrder = undefined;
+          node.highlighted = false;
+        }
+
+        const session = createTreesSession(cleanStart);
+        session.runTraversal(order);
+        const events = session.getEvents();
+
+        set({
+          sandboxState: cloneWorldState(cleanStart),
+          timeline: createTimeline<AnyWorldState>(cleanStart, events, {
+            speed: state.timeline.speed,
+            isPlaying: events.length > 0,
+            startCursor: -1,
+          }),
+          metrics: createEmptyMetrics(),
+          statusToast: null,
+        });
+      },
+
+      sandboxAutoBalanceTree: () => {
+        const state = get();
+        const current = getCurrentState(state.timeline);
+        if (current.world !== 'trees') return;
+
+        soundEngine.playSelect();
+        const initial = cloneWorldState(current);
+        const session = createTreesSession(initial);
+        session.autoBalance();
+        const events = session.getEvents();
+        const finalState = session.getState();
+
+        if (events.length === 0) {
+          set({
+            statusToast: {
+              message: 'Tree is already AVL-balanced (|BF| <= 1).',
+              tone: 'info',
+            },
+          });
+          return;
+        }
+
+        set({
+          sandboxState: cloneWorldState(finalState),
+          timeline: createTimeline<AnyWorldState>(initial, events, {
+            speed: state.timeline.speed,
+            isPlaying: true,
+            startCursor: -1,
+          }),
+          metrics: createEmptyMetrics(),
+          statusToast: null,
+        });
       },
 
       isLevelUnlocked: (levelId: string) => {

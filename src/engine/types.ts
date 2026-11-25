@@ -1,4 +1,9 @@
-export type WorldId = 'arrays' | 'linked-lists' | 'stacks-queues' | 'pathfinding';
+export type WorldId =
+  | 'arrays'
+  | 'linked-lists'
+  | 'stacks-queues'
+  | 'pathfinding'
+  | 'trees';
 
 export type Rank = 'S' | 'A' | 'B' | 'C';
 
@@ -39,6 +44,12 @@ export type SimEventType =
   | 'RELAX_EDGE'
   | 'PATH_FOUND'
   | 'NO_PATH'
+  | 'PROBE'
+  | 'INSERT_NODE'
+  | 'DELETE_NODE'
+  | 'ROTATE_LEFT'
+  | 'ROTATE_RIGHT'
+  | 'INVARIANT_FAULT'
   | 'SUCCESS'
   | 'FAIL';
 
@@ -107,6 +118,10 @@ export interface ArraysWorldState {
   window?: [number, number];
   auxSlots?: number[];
   targetValues?: number[];
+  /** Optional Binary Search state */
+  searchTarget?: number;
+  probedIndices?: number[];
+  foundIndex?: number | null;
 }
 
 /* ============================================================================
@@ -174,12 +189,19 @@ export interface GridCell {
   type: GridCellType;
   weight: number;
   visited?: boolean;
+  visitedBy?: 'start' | 'goal';
   inFrontier?: boolean;
   inPath?: boolean;
   distance?: number;
 }
 
-export type PathfindingAlgorithm = 'bfs' | 'dijkstra' | 'astar';
+export type PathfindingAlgorithm =
+  | 'bfs'
+  | 'dfs'
+  | 'dijkstra'
+  | 'greedy'
+  | 'astar'
+  | 'bidirectional';
 
 export interface PathfindingWorldState {
   world: 'pathfinding';
@@ -197,6 +219,54 @@ export interface PathfindingWorldState {
 }
 
 /* ============================================================================
+ * World 5: Binary Trees & BSTs (Canopy Nexus)
+ * ========================================================================== */
+
+export type TreeTraversalOrder =
+  | 'preorder'
+  | 'inorder'
+  | 'postorder'
+  | 'levelorder';
+
+export type TreeInteractionMode =
+  | 'search'
+  | 'insert'
+  | 'traverse'
+  | 'delete'
+  | 'balance'
+  | 'sandbox';
+
+export interface TreeNode {
+  id: string;
+  value: number;
+  leftId: string | null;
+  rightId: string | null;
+  pos: [number, number, number];
+  corrupted?: boolean;
+  highlighted?: boolean;
+  /** 1-based traversal order badge */
+  visitedOrder?: number;
+  /** AVL balance factor = height(left) - height(right) */
+  balanceFactor?: number;
+}
+
+export interface TreesWorldState {
+  world: 'trees';
+  mode: TreeInteractionMode;
+  nodes: Record<string, TreeNode>;
+  rootId: string | null;
+  selectedNodeId: string | null;
+  pendingQueue: number[];
+  visitedSequence: number[];
+  targetSequence?: number[];
+  searchTarget?: number;
+  foundNodeId?: string | null;
+  expectedValues?: number[];
+  showBalanceFactors?: boolean;
+  invariantViolations: number;
+}
+
+/* ============================================================================
  * Discriminated Union & Curriculum / Sandbox / Runner Contracts
  * ========================================================================== */
 
@@ -204,7 +274,8 @@ export type AnyWorldState =
   | ArraysWorldState
   | LinkedListWorldState
   | StacksQueuesWorldState
-  | PathfindingWorldState;
+  | PathfindingWorldState
+  | TreesWorldState;
 
 export interface LevelDefinition<TState extends AnyWorldState = AnyWorldState> {
   id: string;
@@ -229,6 +300,8 @@ export interface LevelDefinition<TState extends AnyWorldState = AnyWorldState> {
   insight: string;
   /** Optional expanded Big-O intuition explanation */
   bigOIntuition?: string;
+  /** Optional progressive hints revealed step-by-step in HUD */
+  hints?: string[];
   strictNoLeaks?: boolean;
   strictNoOverflows?: boolean;
   maxCyclesBudget?: number;

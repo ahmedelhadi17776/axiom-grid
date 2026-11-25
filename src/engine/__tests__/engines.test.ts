@@ -5,6 +5,9 @@ import {
   createLinkedListSession,
   createPathfindingSession,
   createStacksQueuesSession,
+  createTreesSession,
+  isValidBST,
+  recomputeTreeLayoutAndMetrics,
 } from '../worlds';
 import { runPlayerCodeSync } from '../../sandbox/codeRunner';
 import { ARRAYS_LEVELS } from '../../levels/arraysLevels';
@@ -12,15 +15,23 @@ import type {
   ArraysWorldState,
   GridCell,
   LinkedListWorldState,
+  PathfindingAlgorithm,
   PathfindingWorldState,
   StacksQueuesWorldState,
+  TreesWorldState,
 } from '../types';
 
-function makeArraysState(values: number[]): ArraysWorldState {
+function makeArraysState(
+  values: number[],
+  searchTarget?: number
+): ArraysWorldState {
   return {
     world: 'arrays',
     slots: values.map((v, i) => ({ id: `slot-${i}`, value: v, state: 'idle' })),
     pointers: {},
+    searchTarget,
+    probedIndices: searchTarget !== undefined ? [] : undefined,
+    foundIndex: searchTarget !== undefined ? null : undefined,
   };
 }
 
@@ -42,9 +53,9 @@ function makeStacksQueuesState(capacity = 2): StacksQueuesWorldState {
   return {
     world: 'stacks-queues',
     inputStream: [
-      { id: 'p1', value: 'A', color: '#00F0FF' },
-      { id: 'p2', value: 'B', color: '#FFB800' },
-      { id: 'p3', value: 'C', color: '#A855F7' },
+      { id: 'p1', value: 'A', color: '#38BDF8' },
+      { id: 'p2', value: 'B', color: '#FBBF24' },
+      { id: 'p3', value: 'C', color: '#A78BFA' },
     ],
     buffers: {
       stk: {
@@ -74,7 +85,7 @@ function makePathfindingGrid(opts: {
   goal: [number, number];
   walls?: [number, number][];
   weights?: [number, number, number][];
-  algorithm?: 'bfs' | 'dijkstra' | 'astar';
+  algorithm?: PathfindingAlgorithm;
 }): PathfindingWorldState {
   const wallSet = new Set((opts.walls ?? []).map(([x, y]) => `${x},${y}`));
   const weightMap = new Map(
@@ -112,6 +123,32 @@ function makePathfindingGrid(opts: {
   };
 }
 
+function makeBalancedTreeState(searchTarget?: number): TreesWorldState {
+  const state: TreesWorldState = {
+    world: 'trees',
+    mode: 'sandbox',
+    rootId: 't1',
+    selectedNodeId: 't1',
+    pendingQueue: [],
+    visitedSequence: [],
+    searchTarget,
+    foundNodeId: null,
+    showBalanceFactors: true,
+    invariantViolations: 0,
+    nodes: {
+      t1: { id: 't1', value: 50, leftId: 't2', rightId: 't3', pos: [0, 0, 0] },
+      t2: { id: 't2', value: 25, leftId: 't4', rightId: 't5', pos: [0, 0, 0] },
+      t3: { id: 't3', value: 75, leftId: 't6', rightId: 't7', pos: [0, 0, 0] },
+      t4: { id: 't4', value: 12, leftId: null, rightId: null, pos: [0, 0, 0] },
+      t5: { id: 't5', value: 37, leftId: null, rightId: null, pos: [0, 0, 0] },
+      t6: { id: 't6', value: 62, leftId: null, rightId: null, pos: [0, 0, 0] },
+      t7: { id: 't7', value: 88, leftId: null, rightId: null, pos: [0, 0, 0] },
+    },
+  };
+  recomputeTreeLayoutAndMetrics(state);
+  return state;
+}
+
 describe('Arrays engine', () => {
   it('supports get, compare, swap, pointers, window, and BOUNDS_FAULT', () => {
     const session = createArraysSession(makeArraysState([30, 10, 20, 40]));
@@ -143,6 +180,22 @@ describe('Arrays engine', () => {
 
     const faultEvents = session.getEvents().filter((e) => e.type === 'BOUNDS_FAULT');
     expect(faultEvents.length).toBe(3);
+  });
+
+  it('supports probe() for binary search with directional sign, probedIndices, and foundIndex', () => {
+    const session = createArraysSession(
+      makeArraysState([10, 20, 30, 40, 50], 40)
+    );
+    expect(session.probe(2)).toBe(-1); // 30 < 40
+    expect(session.probe(4)).toBe(1); // 50 > 40
+    expect(session.probe(3)).toBe(0); // 40 === 40
+
+    const finalState = session.getState();
+    expect(finalState.foundIndex).toBe(3);
+    expect(finalState.probedIndices).toEqual([2, 4, 3]);
+    expect(finalState.slots[3].state).toBe('sorted');
+    expect(session.getMetrics().cycles).toBe(3);
+    expect(session.getEvents().filter((e) => e.type === 'PROBE')).toHaveLength(3);
   });
 });
 
@@ -287,6 +340,16 @@ describe('Pathfinding engine', () => {
     });
     const session = createPathfindingSession(weightedGrid);
     const comparison = session.compareAllAlgorithms();
+    expect(comparison).toHaveLength(6);
+    expect(comparison.map((r) => r.algorithm)).toEqual([
+      'bfs',
+      'dfs',
+      'dijkstra',
+      'greedy',
+      'astar',
+      'bidirectional',
+    ]);
+
     const bfs = comparison.find((r) => r.algorithm === 'bfs')!;
     const dijkstra = comparison.find((r) => r.algorithm === 'dijkstra')!;
     const astar = comparison.find((r) => r.algorithm === 'astar')!;
@@ -298,7 +361,7 @@ describe('Pathfinding engine', () => {
     expect(astar.pathCost).toBe(dijkstra.pathCost);
   });
 
-  it('proves A* visits fewer nodes than Dijkstra on an open arena', () => {
+  it('proves A* and Bidirectional BFS visit fewer nodes than Dijkstra/BFS on an open arena', () => {
     const openGrid = makePathfindingGrid({
       width: 10,
       height: 10,
@@ -311,14 +374,42 @@ describe('Pathfinding engine', () => {
       ],
     });
     const session = createPathfindingSession(openGrid);
-    const [bfs, dijkstra, astar] = session.compareAllAlgorithms();
+    const comparison = session.compareAllAlgorithms();
+    const bfs = comparison.find((r) => r.algorithm === 'bfs')!;
+    const dfs = comparison.find((r) => r.algorithm === 'dfs')!;
+    const dijkstra = comparison.find((r) => r.algorithm === 'dijkstra')!;
+    const greedy = comparison.find((r) => r.algorithm === 'greedy')!;
+    const astar = comparison.find((r) => r.algorithm === 'astar')!;
+    const bidirectional = comparison.find(
+      (r) => r.algorithm === 'bidirectional'
+    )!;
 
-    expect(bfs.algorithm).toBe('bfs');
-    expect(dijkstra.algorithm).toBe('dijkstra');
-    expect(astar.algorithm).toBe('astar');
+    expect(dfs.pathFound).toBe(true);
+    expect(greedy.pathFound).toBe(true);
     expect(astar.pathFound).toBe(true);
+    expect(bidirectional.pathFound).toBe(true);
     expect(astar.pathCost).toBe(dijkstra.pathCost);
+    expect(bidirectional.pathCost).toBe(bfs.pathCost);
     expect(astar.visitedCount).toBeLessThan(dijkstra.visitedCount);
+    expect(bidirectional.visitedCount).toBeLessThan(bfs.visitedCount);
+  });
+
+  it('tags visitedBy start and goal waves during bidirectional search', () => {
+    const grid = makePathfindingGrid({
+      width: 9,
+      height: 5,
+      start: [0, 2],
+      goal: [8, 2],
+      algorithm: 'bidirectional',
+    });
+    const session = createPathfindingSession(grid);
+    const res = session.runSearch();
+    expect(res.pathFound).toBe(true);
+    expect(res.pathCost).toBe(8);
+
+    const state = session.getState();
+    expect(state.cells.some((c) => c.visitedBy === 'start')).toBe(true);
+    expect(state.cells.some((c) => c.visitedBy === 'goal')).toBe(true);
   });
 
   it('emits NO_PATH when the goal is completely walled off', () => {
@@ -340,6 +431,117 @@ describe('Pathfinding engine', () => {
     expect(res.pathFound).toBe(false);
     expect(res.pathCost).toBe(0);
     expect(session.getEvents().some((e) => e.type === 'NO_PATH')).toBe(true);
+  });
+});
+
+describe('Trees engine', () => {
+  it('supports probe() with BST sign comparisons and foundNodeId lock', () => {
+    const session = createTreesSession(makeBalancedTreeState(62));
+    expect(session.probe('t1')).toBe(-1); // 50 < 62
+    expect(session.probe('t3')).toBe(1); // 75 > 62
+    expect(session.probe('t6')).toBe(0); // 62 === 62
+    expect(session.getState().foundNodeId).toBe('t6');
+    expect(session.getMetrics().cycles).toBe(3);
+  });
+
+  it('supports insert() and enforces BST bounds in insertAt()', () => {
+    const initial: TreesWorldState = {
+      world: 'trees',
+      mode: 'insert',
+      rootId: 't1',
+      selectedNodeId: 't1',
+      pendingQueue: [35, 15],
+      visitedSequence: [],
+      invariantViolations: 0,
+      nodes: {
+        t1: { id: 't1', value: 50, leftId: 't2', rightId: null, pos: [0, 0, 0] },
+        t2: { id: 't2', value: 25, leftId: null, rightId: null, pos: [0, 0, 0] },
+      },
+    };
+    const session = createTreesSession(initial);
+
+    // Invalid: 35 cannot dock on left of 25
+    expect(session.insertAt('t2', 'left', 35)).toBeNull();
+    expect(session.getState().invariantViolations).toBe(1);
+    expect(session.getEvents().some((e) => e.type === 'INVARIANT_FAULT')).toBe(
+      true
+    );
+
+    // Valid: 35 docks on right of 25 (25 < 35 < 50)
+    const id35 = session.insertAt('t2', 'right');
+    expect(id35).toBeTruthy();
+    // Standard insert for 15
+    const id15 = session.insert(15);
+    expect(id15).toBeTruthy();
+
+    const finalState = session.getState();
+    expect(finalState.pendingQueue).toEqual([]);
+    expect(isValidBST(finalState)).toBe(true);
+  });
+
+  it('executes preorder, inorder, postorder, and levelorder traversals accurately', () => {
+    const session = createTreesSession(makeBalancedTreeState());
+    expect(session.runTraversal('preorder')).toEqual([50, 25, 12, 37, 75, 62, 88]);
+    expect(session.runTraversal('inorder')).toEqual([12, 25, 37, 50, 62, 75, 88]);
+    expect(session.runTraversal('postorder')).toEqual([12, 37, 25, 62, 88, 75, 50]);
+    expect(session.runTraversal('levelorder')).toEqual([50, 25, 75, 12, 37, 62, 88]);
+  });
+
+  it('handles 0-child, 1-child, and 2-child deleteNode while preserving BST invariant', () => {
+    const session = createTreesSession(makeBalancedTreeState());
+
+    // 0-child leaf delete (12)
+    expect(session.deleteNode('t4')).toBe(true);
+    expect(isValidBST(session.getState())).toBe(true);
+
+    // 1-child node delete (t2 now only has right child t5(37))
+    expect(session.deleteNode('t2')).toBe(true);
+    expect(isValidBST(session.getState())).toBe(true);
+
+    // 2-child root delete (t1(50) promotes in-order successor t6(62))
+    expect(session.deleteNode('t1')).toBe(true);
+    const afterRootDel = session.getState();
+    expect(afterRootDel.rootId).toBe('t6');
+    expect(isValidBST(afterRootDel)).toBe(true);
+    expect(session.runTraversal('inorder')).toEqual([37, 62, 75, 88]);
+  });
+
+  it('supports rotateLeft, rotateRight, and autoBalance on skewed trees', () => {
+    const skewed: TreesWorldState = {
+      world: 'trees',
+      mode: 'balance',
+      rootId: 't1',
+      selectedNodeId: 't1',
+      pendingQueue: [],
+      visitedSequence: [],
+      showBalanceFactors: true,
+      invariantViolations: 0,
+      nodes: {
+        t1: { id: 't1', value: 10, leftId: null, rightId: 't2', pos: [0, 0, 0] },
+        t2: { id: 't2', value: 20, leftId: null, rightId: 't3', pos: [0, 0, 0] },
+        t3: { id: 't3', value: 30, leftId: null, rightId: 't4', pos: [0, 0, 0] },
+        t4: { id: 't4', value: 40, leftId: null, rightId: 't5', pos: [0, 0, 0] },
+        t5: { id: 't5', value: 50, leftId: null, rightId: null, pos: [0, 0, 0] },
+      },
+    };
+    const session = createTreesSession(skewed);
+    expect(session.getBalanceFactor('t1')).toBe(-4);
+
+    const rotations = session.autoBalance();
+    expect(rotations).toBeGreaterThan(0);
+
+    const balanced = session.getState();
+    expect(isValidBST(balanced)).toBe(true);
+    for (const node of Object.values(balanced.nodes)) {
+      expect(Math.abs(node.balanceFactor ?? 0)).toBeLessThanOrEqual(1);
+    }
+
+    // Verify rotateRight is reversible on root when root has a left child
+    const rootId = balanced.rootId!;
+    if (balanced.nodes[rootId].leftId) {
+      expect(session.rotateRight(rootId)).toBe(true);
+      expect(isValidBST(session.getState())).toBe(true);
+    }
   });
 });
 
@@ -371,9 +573,17 @@ describe('Code Runner (runPlayerCodeSync)', () => {
   });
 });
 
-describe('applyDirectAction across all 4 worlds', () => {
-  it('applies direct actions for arrays', () => {
-    const initial = makeArraysState([9, 4, 7]);
+describe('applyDirectAction across all 5 worlds', () => {
+  it('applies direct actions for arrays (SWAP, SET_WINDOW, PROBE)', () => {
+    const initial = makeArraysState([9, 4, 7], 4);
+    const probed = applyDirectAction(initial, {
+      world: 'arrays',
+      type: 'PROBE',
+      payload: { index: 1 },
+    });
+    expect((probed.state as ArraysWorldState).foundIndex).toBe(1);
+    expect(probed.metrics.cycles).toBe(1);
+
     const swapped = applyDirectAction(initial, {
       world: 'arrays',
       type: 'SWAP',
@@ -464,15 +674,38 @@ describe('applyDirectAction across all 4 worlds', () => {
     const r2 = applyDirectAction(r1.state, {
       world: 'pathfinding',
       type: 'SET_ALGORITHM',
-      payload: { algorithm: 'astar' },
+      payload: { algorithm: 'bidirectional' },
     });
     const r3 = applyDirectAction(r2.state, {
       world: 'pathfinding',
       type: 'RUN_SEARCH',
     });
     const pfState = r3.state as PathfindingWorldState;
-    expect(pfState.algorithm).toBe('astar');
+    expect(pfState.algorithm).toBe('bidirectional');
     expect(pfState.pathFound).toBe(true);
     expect(pfState.pathCost).toBe(8);
+  });
+
+  it('applies direct actions for trees', () => {
+    const initial = makeBalancedTreeState(62);
+    const r1 = applyDirectAction(initial, {
+      world: 'trees',
+      type: 'PROBE',
+      payload: { id: 't6' },
+    });
+    expect((r1.state as TreesWorldState).foundNodeId).toBe('t6');
+
+    const r2 = applyDirectAction(
+      r1.state,
+      {
+        world: 'trees',
+        type: 'RUN_TRAVERSAL',
+        payload: { order: 'inorder' },
+      },
+      r1.metrics
+    );
+    expect((r2.state as TreesWorldState).visitedSequence).toEqual([
+      12, 25, 37, 50, 62, 75, 88,
+    ]);
   });
 });

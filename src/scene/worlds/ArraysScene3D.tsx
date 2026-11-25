@@ -18,39 +18,57 @@ function getSlotVisuals(
   slotState: ArraySlotState,
   isSelected: boolean,
   isHovered: boolean,
-  inWindow: boolean
+  inWindow: boolean,
+  isShielded: boolean,
+  isFoundProbe: boolean
 ): { bodyColor: string; emissive: string; intensity: number; capColor: string } {
+  if (isFoundProbe) {
+    return {
+      bodyColor: '#0E2B22',
+      emissive: '#34D399',
+      intensity: 1.5,
+      capColor: '#34D399',
+    };
+  }
+  if (isShielded) {
+    return {
+      bodyColor: isHovered ? '#1A2740' : '#121B2E',
+      emissive: isHovered ? '#38BDF8' : '#334155',
+      intensity: isHovered ? 1.2 : 0.32,
+      capColor: isHovered ? '#38BDF8' : '#475569',
+    };
+  }
   if (isSelected) {
     return {
-      bodyColor: '#0A2538',
-      emissive: '#00F0FF',
-      intensity: 2.2,
-      capColor: '#00F0FF',
+      bodyColor: '#112842',
+      emissive: '#38BDF8',
+      intensity: 1.5,
+      capColor: '#38BDF8',
     };
   }
   switch (slotState) {
     case 'swapping':
-      return { bodyColor: '#2B1F06', emissive: '#FFB800', intensity: 2.3, capColor: '#FFB800' };
+      return { bodyColor: '#2B210E', emissive: '#FBBF24', intensity: 1.5, capColor: '#FBBF24' };
     case 'comparing':
-      return { bodyColor: '#261C08', emissive: '#FFB800', intensity: 1.9, capColor: '#FFB800' };
+      return { bodyColor: '#261E0F', emissive: '#FBBF24', intensity: 1.35, capColor: '#FBBF24' };
     case 'sorted':
-      return { bodyColor: '#08291E', emissive: '#00FF9D', intensity: 1.85, capColor: '#00FF9D' };
+      return { bodyColor: '#0E2921', emissive: '#34D399', intensity: 1.4, capColor: '#34D399' };
     case 'active':
-      return { bodyColor: '#0A2436', emissive: '#00F0FF', intensity: 1.8, capColor: '#00F0FF' };
+      return { bodyColor: '#10263D', emissive: '#38BDF8', intensity: 1.35, capColor: '#38BDF8' };
     case 'window':
-      return { bodyColor: '#0B2338', emissive: '#00F0FF', intensity: 1.5, capColor: '#38BDF8' };
+      return { bodyColor: '#11253B', emissive: '#38BDF8', intensity: 1.25, capColor: '#38BDF8' };
     case 'corrupted':
     case 'error':
-      return { bodyColor: '#2E0A16', emissive: '#FF2A5F', intensity: 2.1, capColor: '#FF2A5F' };
+      return { bodyColor: '#2E1320', emissive: '#FB7185', intensity: 1.5, capColor: '#FB7185' };
     default:
       if (inWindow) {
-        return { bodyColor: '#0D2136', emissive: '#00F0FF', intensity: 1.35, capColor: '#38BDF8' };
+        return { bodyColor: '#12243A', emissive: '#38BDF8', intensity: 1.15, capColor: '#38BDF8' };
       }
       return {
-        bodyColor: isHovered ? '#162442' : '#0E162B',
-        emissive: isHovered ? '#00F0FF' : '#2563EB',
-        intensity: isHovered ? 1.4 : 0.45,
-        capColor: isHovered ? '#00F0FF' : '#3B82F6',
+        bodyColor: isHovered ? '#1A2844' : '#131E34',
+        emissive: isHovered ? '#38BDF8' : '#3B82F6',
+        intensity: isHovered ? 1.25 : 0.48,
+        capColor: isHovered ? '#38BDF8' : '#60A5FA',
       };
   }
 }
@@ -63,6 +81,8 @@ interface SlotPedestalProps {
   isSelected: boolean;
   isHovered: boolean;
   inWindow: boolean;
+  isShielded: boolean;
+  isFoundProbe: boolean;
   interactive: boolean;
   onHover: (idx: number | null) => void;
   onClick: (idx: number, shiftKey: boolean) => void;
@@ -76,12 +96,21 @@ function SlotPedestal({
   isSelected,
   isHovered,
   inWindow,
+  isShielded,
+  isFoundProbe,
   interactive,
   onHover,
   onClick,
 }: SlotPedestalProps) {
   const groupRef = useRef<THREE.Group | null>(null);
-  const visuals = getSlotVisuals(slot.state, isSelected, isHovered, inWindow);
+  const visuals = getSlotVisuals(
+    slot.state,
+    isSelected,
+    isHovered,
+    inWindow,
+    isShielded,
+    isFoundProbe
+  );
 
   useFrame((clockState, delta) => {
     const group = groupRef.current;
@@ -91,13 +120,13 @@ function SlotPedestal({
 
     const targetLift =
       slot.state === 'swapping'
-        ? 0.52 + Math.sin(t * 10) * 0.08
-        : isSelected
-          ? 0.36 + Math.sin(t * 5) * 0.05
+        ? 0.48 + Math.sin(t * 9) * 0.07
+        : isSelected || isFoundProbe
+          ? 0.3 + Math.sin(t * 4.5) * 0.04
           : isHovered
-            ? 0.2
+            ? 0.16
             : slot.state === 'comparing'
-              ? 0.16
+              ? 0.14
               : 0;
 
     group.position.x = THREE.MathUtils.lerp(group.position.x, xPos, 1 - Math.exp(-dt * 12));
@@ -126,77 +155,103 @@ function SlotPedestal({
 
   return (
     <group>
-      {/* Fixed base socket on memory rail */}
-      <mesh position={[xPos, 0.08, 0]} receiveShadow>
-        <boxGeometry args={[1.26, 0.14, 1.26]} />
-        <meshStandardMaterial color="#0A1020" roughness={0.6} metalness={0.5} />
+      {/* Layered metallic base socket on memory rail */}
+      <mesh position={[xPos, 0.07, 0]} receiveShadow>
+        <boxGeometry args={[1.3, 0.12, 1.3]} />
+        <meshStandardMaterial color="#121B2E" roughness={0.48} metalness={0.68} />
+      </mesh>
+      <mesh position={[xPos, 0.135, 0]} receiveShadow>
+        <boxGeometry args={[1.14, 0.03, 1.14]} />
+        <meshStandardMaterial color="#0C1322" roughness={0.55} metalness={0.55} />
       </mesh>
 
       {/* Index label on front edge */}
       <CanvasLabel
         text={`[${index}]`}
-        position={[xPos, 0.12, 0.96]}
-        scale={0.34}
+        position={[xPos, 0.14, 0.98]}
+        scale={0.33}
         fontSize={36}
-        color={isSelected ? '#00F0FF' : '#7C93B8'}
-        background="rgba(6, 10, 20, 0.72)"
-        borderColor={isSelected ? '#00F0FF' : 'rgba(30, 46, 82, 0.7)'}
+        color={isSelected || isFoundProbe ? visuals.capColor : '#94A3B8'}
+        background="rgba(11, 16, 28, 0.84)"
+        borderColor={isSelected || isFoundProbe ? visuals.capColor : 'rgba(51, 65, 85, 0.7)'}
       />
 
-      {/* Animated pedestal block */}
+      {/* Animated collared pedestal block */}
       <group ref={groupRef} position={[xPos, 0, 0]}>
+        {/* Lower beveled metallic collar */}
+        <mesh position={[0, 0.2, 0]} castShadow receiveShadow>
+          <boxGeometry args={[1.1, 0.12, 1.1]} />
+          <meshStandardMaterial color="#162238" roughness={0.38} metalness={0.72} />
+        </mesh>
+
+        {/* Main pedestal column */}
         <mesh
-          position={[0, 0.15 + height / 2, 0]}
+          position={[0, 0.18 + height / 2, 0]}
           castShadow
           receiveShadow
           onPointerOver={handlePointerOver}
           onPointerOut={handlePointerOut}
           onClick={handleClick}
         >
-          <boxGeometry args={[1.06, height, 1.06]} />
+          <boxGeometry args={[1.0, height, 1.0]} />
           <meshStandardMaterial
             color={visuals.bodyColor}
             emissive={visuals.emissive}
-            emissiveIntensity={visuals.intensity * 0.25}
-            roughness={0.32}
-            metalness={0.55}
+            emissiveIntensity={isShielded ? 0.18 : visuals.intensity * 0.28}
+            roughness={0.34}
+            metalness={0.68}
           />
         </mesh>
 
-        {/* Glowing neon top cap */}
-        <mesh position={[0, 0.15 + height + 0.045, 0]}>
-          <boxGeometry args={[1.08, 0.09, 1.08]} />
+        {/* Upper beveled metallic bezel */}
+        <mesh position={[0, 0.18 + height + 0.035, 0]} castShadow>
+          <boxGeometry args={[1.08, 0.07, 1.08]} />
+          <meshStandardMaterial color="#192742" roughness={0.32} metalness={0.72} />
+        </mesh>
+
+        {/* Calm luminous top inlay cap (or shielded dark-slate cap) */}
+        <mesh position={[0, 0.18 + height + 0.085, 0]}>
+          <boxGeometry args={[0.96, 0.045, 0.96]} />
           <meshStandardMaterial
             color={visuals.capColor}
             emissive={visuals.emissive}
-            emissiveIntensity={visuals.intensity}
-            toneMapped={false}
-            roughness={0.18}
+            emissiveIntensity={isShielded ? (isHovered ? 1.1 : 0.25) : Math.min(1.55, visuals.intensity)}
+            toneMapped={!isShielded}
+            roughness={isShielded ? 0.42 : 0.22}
+            metalness={isShielded ? 0.65 : 0.2}
           />
         </mesh>
 
-        {/* Selection ring around base */}
-        {isSelected && (
-          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.22, 0]}>
-            <ringGeometry args={[0.76, 0.9, 4]} />
+        {/* Selection or Found Halo Ring */}
+        {(isSelected || isFoundProbe) && (
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.24, 0]}>
+            <ringGeometry args={[0.76, 0.89, 4]} />
             <meshStandardMaterial
-              color="#00F0FF"
-              emissive="#00F0FF"
-              emissiveIntensity={2.2}
+              color={isFoundProbe ? '#34D399' : '#38BDF8'}
+              emissive={isFoundProbe ? '#34D399' : '#38BDF8'}
+              emissiveIntensity={1.45}
               toneMapped={false}
               side={THREE.DoubleSide}
             />
           </mesh>
         )}
 
-        {/* Value label floating above pedestal */}
+        {/* Value label (or '?' when shielded in Binary Search mode) */}
         <CanvasLabel
-          text={String(slot.value)}
-          position={[0, 0.15 + height + 0.56, 0]}
-          scale={0.48}
+          text={isShielded ? '?' : String(slot.value)}
+          position={[0, 0.18 + height + 0.56, 0]}
+          scale={0.46}
           fontSize={44}
-          color={slot.state === 'corrupted' ? '#FF6B8E' : '#F0F9FF'}
-          background="rgba(6, 10, 20, 0.88)"
+          color={
+            isShielded
+              ? isHovered
+                ? '#7DD3FC'
+                : '#94A3B8'
+              : slot.state === 'corrupted'
+                ? '#FDA4AF'
+                : '#F1F5F9'
+          }
+          background="rgba(11, 16, 28, 0.88)"
           borderColor={visuals.capColor}
         />
       </group>
@@ -206,9 +261,51 @@ function SlotPedestal({
 
 function getPointerColor(name: string): string {
   const lower = name.toLowerCase();
-  if (lower === 'l' || lower === 'left' || lower === 'read' || lower === 'i') return '#00F0FF';
-  if (lower === 'r' || lower === 'right' || lower === 'write' || lower === 'j') return '#A855F7';
-  return '#FFB800';
+  if (lower === 'l' || lower === 'left' || lower === 'read' || lower === 'i') return '#38BDF8';
+  if (lower === 'r' || lower === 'right' || lower === 'write' || lower === 'j') return '#A78BFA';
+  return '#FBBF24';
+}
+
+function SearchTargetBeacon({
+  target,
+  found,
+}: {
+  target: number;
+  found: boolean;
+}) {
+  const crystalRef = useRef<THREE.Mesh | null>(null);
+  const color = found ? '#34D399' : '#38BDF8';
+
+  useFrame((clockState) => {
+    if (!crystalRef.current) return;
+    const t = clockState.clock.elapsedTime;
+    crystalRef.current.rotation.y = t * 1.5;
+    crystalRef.current.position.y = 3.55 + Math.sin(t * 2.8) * 0.08;
+  });
+
+  return (
+    <group position={[0, 0, -1.6]}>
+      <mesh ref={crystalRef} position={[0, 3.55, 0]}>
+        <octahedronGeometry args={[0.24, 0]} />
+        <meshStandardMaterial
+          color={color}
+          emissive={color}
+          emissiveIntensity={1.45}
+          toneMapped={false}
+          roughness={0.2}
+        />
+      </mesh>
+      <CanvasLabel
+        text={found ? `LOCKED: ${target}` : `TARGET: ${target}`}
+        position={[0, 4.18, 0]}
+        scale={0.46}
+        fontSize={38}
+        color="#F8FAFC"
+        background="rgba(11, 18, 32, 0.92)"
+        borderColor={color}
+      />
+    </group>
+  );
 }
 
 export function ArraysScene3D({ state, interactive, onDirectAction }: ArraysScene3DProps) {
@@ -216,8 +313,11 @@ export function ArraysScene3D({ state, interactive, onDirectAction }: ArraysScen
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
 
   const count = state.slots.length;
-  const railWidth = Math.max(4, count * SLOT_SPACING + 1.0);
+  const railWidth = Math.max(4, count * SLOT_SPACING + 1.1);
   const startOffset = ((count - 1) * SLOT_SPACING) / 2;
+  const isProbeMode = state.searchTarget !== undefined;
+  const probedSet = useMemo(() => new Set(state.probedIndices ?? []), [state.probedIndices]);
+  const isSearchResolved = state.foundIndex !== undefined && state.foundIndex !== null;
 
   const { minVal, valSpan } = useMemo(() => {
     let min = Infinity;
@@ -244,6 +344,18 @@ export function ArraysScene3D({ state, interactive, onDirectAction }: ArraysScen
 
   const handleSlotClick = (idx: number, shiftKey: boolean) => {
     if (!interactive) return;
+
+    // Binary Search Probe Mode: clicking probes the slot directly
+    if (isProbeMode) {
+      setSelectedIdx(null);
+      soundEngine.playStep(0.6);
+      onDirectAction?.({
+        world: 'arrays',
+        type: 'PROBE',
+        payload: { index: idx },
+      });
+      return;
+    }
 
     // Shift+Click slides the window if this level has an active window
     if (shiftKey && state.window) {
@@ -311,28 +423,33 @@ export function ArraysScene3D({ state, interactive, onDirectAction }: ArraysScen
 
   return (
     <group>
+      {/* Floating Binary Search Target Radar Beacon */}
+      {isProbeMode && state.searchTarget !== undefined && (
+        <SearchTargetBeacon target={state.searchTarget} found={isSearchResolved} />
+      )}
+
       {/* Contiguous Memory Rail Baseplate */}
       <mesh position={[0, 0.02, 0]} receiveShadow>
-        <boxGeometry args={[railWidth, 0.08, 2.2]} />
-        <meshStandardMaterial color="#0A1124" roughness={0.5} metalness={0.6} />
+        <boxGeometry args={[railWidth, 0.09, 2.28]} />
+        <meshStandardMaterial color="#131E34" roughness={0.42} metalness={0.7} />
       </mesh>
 
-      {/* Glowing cyan rail trim bars */}
-      <mesh position={[0, 0.07, 1.08]}>
-        <boxGeometry args={[railWidth, 0.05, 0.06]} />
+      {/* Calm sky-cyan rail trim bars */}
+      <mesh position={[0, 0.075, 1.1]}>
+        <boxGeometry args={[railWidth, 0.045, 0.055]} />
         <meshStandardMaterial
-          color="#00F0FF"
-          emissive="#00F0FF"
-          emissiveIntensity={1.6}
+          color="#38BDF8"
+          emissive="#38BDF8"
+          emissiveIntensity={1.2}
           toneMapped={false}
         />
       </mesh>
-      <mesh position={[0, 0.07, -1.08]}>
-        <boxGeometry args={[railWidth, 0.05, 0.06]} />
+      <mesh position={[0, 0.075, -1.1]}>
+        <boxGeometry args={[railWidth, 0.045, 0.055]} />
         <meshStandardMaterial
-          color="#00F0FF"
-          emissive="#00F0FF"
-          emissiveIntensity={1.6}
+          color="#38BDF8"
+          emissive="#38BDF8"
+          emissiveIntensity={1.2}
           toneMapped={false}
         />
       </mesh>
@@ -340,8 +457,14 @@ export function ArraysScene3D({ state, interactive, onDirectAction }: ArraysScen
       {/* Memory Slot Pedestals */}
       {state.slots.map((slot, idx) => {
         const xPos = idx * SLOT_SPACING - startOffset;
+        const isShielded = isProbeMode && !isSearchResolved && !probedSet.has(idx);
+        const isFoundProbe = isProbeMode && state.foundIndex === idx;
         const norm = (slot.value - minVal) / valSpan;
-        const height = slot.value === 0 ? 0.32 : 0.55 + norm * 2.15;
+        const height = isShielded
+          ? 1.15
+          : slot.value === 0
+            ? 0.34
+            : 0.55 + norm * 2.1;
         const inWindow =
           windowVisual !== null && idx >= windowVisual.left && idx <= windowVisual.right;
         const slotPointers = pointersByIndex.get(idx);
@@ -353,37 +476,39 @@ export function ArraysScene3D({ state, interactive, onDirectAction }: ArraysScen
               index={idx}
               xPos={xPos}
               height={height}
-              isSelected={selectedIdx === idx}
+              isSelected={!isProbeMode && selectedIdx === idx}
               isHovered={hoveredIdx === idx}
               inWindow={inWindow}
+              isShielded={isShielded}
+              isFoundProbe={isFoundProbe}
               interactive={interactive}
               onHover={setHoveredIdx}
               onClick={handleSlotClick}
             />
 
-            {/* Floating Neon Pointer Beacons */}
+            {/* Floating Pointer Beacons */}
             {slotPointers &&
               slotPointers.map((ptrName, pIdx) => {
                 const ptrColor = getPointerColor(ptrName);
-                const yBeacon = 0.15 + height + 1.25 + pIdx * 0.68;
+                const yBeacon = 0.18 + height + 1.25 + pIdx * 0.68;
                 return (
                   <group key={ptrName} position={[xPos, yBeacon, 0]}>
                     <mesh rotation={[Math.PI, 0, 0]} position={[0, -0.22, 0]}>
-                      <coneGeometry args={[0.16, 0.3, 4]} />
+                      <coneGeometry args={[0.15, 0.28, 4]} />
                       <meshStandardMaterial
                         color={ptrColor}
                         emissive={ptrColor}
-                        emissiveIntensity={2.0}
+                        emissiveIntensity={1.4}
                         toneMapped={false}
                       />
                     </mesh>
                     <CanvasLabel
                       text={ptrName.toUpperCase()}
                       position={[0, 0.18, 0]}
-                      scale={0.36}
+                      scale={0.35}
                       fontSize={34}
                       color={ptrColor}
-                      background="rgba(6, 10, 20, 0.9)"
+                      background="rgba(11, 16, 28, 0.9)"
                       borderColor={ptrColor}
                     />
                   </group>
@@ -399,30 +524,30 @@ export function ArraysScene3D({ state, interactive, onDirectAction }: ArraysScen
           <mesh position={[0, 1.55, 0]}>
             <boxGeometry args={[windowVisual.width, 2.9, 1.58]} />
             <meshStandardMaterial
-              color="#00F0FF"
-              emissive="#00F0FF"
-              emissiveIntensity={0.65}
+              color="#38BDF8"
+              emissive="#38BDF8"
+              emissiveIntensity={0.45}
               transparent
-              opacity={0.11}
+              opacity={0.09}
               depthWrite={false}
             />
           </mesh>
-          {/* Glowing top/bottom window frame rails */}
+          {/* Glowing top window frame rails */}
           <mesh position={[0, 3.0, 0.78]}>
-            <boxGeometry args={[windowVisual.width, 0.06, 0.06]} />
+            <boxGeometry args={[windowVisual.width, 0.055, 0.055]} />
             <meshStandardMaterial
-              color="#00F0FF"
-              emissive="#00F0FF"
-              emissiveIntensity={2.0}
+              color="#38BDF8"
+              emissive="#38BDF8"
+              emissiveIntensity={1.35}
               toneMapped={false}
             />
           </mesh>
           <mesh position={[0, 3.0, -0.78]}>
-            <boxGeometry args={[windowVisual.width, 0.06, 0.06]} />
+            <boxGeometry args={[windowVisual.width, 0.055, 0.055]} />
             <meshStandardMaterial
-              color="#00F0FF"
-              emissive="#00F0FF"
-              emissiveIntensity={2.0}
+              color="#38BDF8"
+              emissive="#38BDF8"
+              emissiveIntensity={1.35}
               toneMapped={false}
             />
           </mesh>
@@ -445,11 +570,11 @@ export function ArraysScene3D({ state, interactive, onDirectAction }: ArraysScen
               }}
             >
               <mesh rotation={[0, 0, Math.PI / 2]}>
-                <coneGeometry args={[0.24, 0.42, 4]} />
+                <coneGeometry args={[0.22, 0.4, 4]} />
                 <meshStandardMaterial
-                  color="#00F0FF"
-                  emissive="#00F0FF"
-                  emissiveIntensity={2.1}
+                  color="#38BDF8"
+                  emissive="#38BDF8"
+                  emissiveIntensity={1.45}
                   toneMapped={false}
                 />
               </mesh>
@@ -474,11 +599,11 @@ export function ArraysScene3D({ state, interactive, onDirectAction }: ArraysScen
               }}
             >
               <mesh rotation={[0, 0, -Math.PI / 2]}>
-                <coneGeometry args={[0.24, 0.42, 4]} />
+                <coneGeometry args={[0.22, 0.4, 4]} />
                 <meshStandardMaterial
-                  color="#00F0FF"
-                  emissive="#00F0FF"
-                  emissiveIntensity={2.1}
+                  color="#38BDF8"
+                  emissive="#38BDF8"
+                  emissiveIntensity={1.45}
                   toneMapped={false}
                 />
               </mesh>
@@ -495,8 +620,8 @@ export function ArraysScene3D({ state, interactive, onDirectAction }: ArraysScen
             position={[-((state.auxSlots.length * 1.3) / 2) - 1.1, 0.4, 0]}
             scale={0.34}
             fontSize={32}
-            color="#A855F7"
-            borderColor="#A855F7"
+            color="#A78BFA"
+            borderColor="#A78BFA"
           />
           {state.auxSlots.map((val, i) => {
             const ax = (i - (state.auxSlots!.length - 1) / 2) * 1.3;
@@ -505,10 +630,11 @@ export function ArraysScene3D({ state, interactive, onDirectAction }: ArraysScen
                 <mesh castShadow>
                   <boxGeometry args={[0.92, 0.48, 0.92]} />
                   <meshStandardMaterial
-                    color="#1E1038"
-                    emissive="#A855F7"
-                    emissiveIntensity={1.2}
-                    toneMapped={false}
+                    color="#1E1838"
+                    emissive="#A78BFA"
+                    emissiveIntensity={0.6}
+                    roughness={0.34}
+                    metalness={0.62}
                   />
                 </mesh>
                 <CanvasLabel
@@ -516,8 +642,8 @@ export function ArraysScene3D({ state, interactive, onDirectAction }: ArraysScen
                   position={[0, 0.58, 0]}
                   scale={0.38}
                   fontSize={38}
-                  color="#E9D5FF"
-                  borderColor="#A855F7"
+                  color="#EDE9FE"
+                  borderColor="#A78BFA"
                 />
               </group>
             );

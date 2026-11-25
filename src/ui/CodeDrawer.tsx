@@ -22,6 +22,7 @@ const API_PILLS: Record<WorldId, Array<{ label: string; snippet: string }>> = {
     { label: 'api.get(i)', snippet: 'api.get(0)' },
     { label: 'api.compare(i, j)', snippet: 'api.compare(0, 1)' },
     { label: 'api.swap(i, j)', snippet: 'api.swap(0, 1);' },
+    { label: 'api.probe(i)', snippet: 'api.probe(0)' },
     { label: 'api.setPointer(n, i)', snippet: "api.setPointer('left', 0);" },
     { label: 'api.markWindow(l, r)', snippet: 'api.markWindow(0, 2);' },
   ],
@@ -43,9 +44,21 @@ const API_PILLS: Record<WorldId, Array<{ label: string; snippet: string }>> = {
   ],
   pathfinding: [
     { label: "setAlgorithm('astar')", snippet: "api.setAlgorithm('astar');" },
+    { label: "setAlgorithm('bidirectional')", snippet: "api.setAlgorithm('bidirectional');" },
     { label: 'setWall(x, y, bool)', snippet: 'api.setWall(2, 2, false);' },
     { label: 'setWeight(x, y, w)', snippet: 'api.setWeight(2, 2, 1);' },
     { label: 'api.runSearch()', snippet: 'api.runSearch();' },
+  ],
+  trees: [
+    { label: 'api.root()', snippet: 'api.root()' },
+    { label: 'api.getNode(id)', snippet: 'api.getNode(api.root())' },
+    { label: 'api.probe(id)', snippet: 'api.probe(api.root())' },
+    { label: 'api.insert(val)', snippet: 'api.insert(42);' },
+    { label: 'api.deleteNode(id)', snippet: 'api.deleteNode(api.root());' },
+    { label: 'api.rotateLeft(id)', snippet: 'api.rotateLeft(api.root());' },
+    { label: 'api.rotateRight(id)', snippet: 'api.rotateRight(api.root());' },
+    { label: "api.runTraversal('inorder')", snippet: "api.runTraversal('inorder');" },
+    { label: 'api.getBalanceFactor(id)', snippet: 'api.getBalanceFactor(api.root())' },
   ],
 };
 
@@ -78,13 +91,13 @@ export const CodeDrawer: React.FC = () => {
           animate={{ x: 0, opacity: 1 }}
           exit={{ x: 440, opacity: 0 }}
           transition={{ type: 'spring', stiffness: 320, damping: 30 }}
-          className="glass-panel pointer-events-auto fixed right-3 top-[74px] bottom-[106px] z-30 flex w-[92vw] max-w-[440px] flex-col overflow-hidden rounded-2xl"
+          className="glass-panel pointer-events-auto fixed right-3 top-[74px] bottom-[112px] z-30 flex w-[92vw] max-w-[440px] flex-col overflow-hidden rounded-2xl"
         >
           {/* Drawer Header */}
-          <div className="flex items-center justify-between border-b border-slate-800/90 px-4 py-2.5">
+          <div className="flex items-center justify-between border-b border-slate-700/60 px-4 py-2.5">
             <div className="flex items-center gap-2">
               <Code2 className="h-4 w-4 text-neon-emerald" />
-              <span className="text-xs font-mono font-bold tracking-wider text-emerald-200">
+              <span className="text-xs font-mono font-semibold tracking-wider text-slate-100">
                 JS SANDBOX RUNNER
               </span>
             </div>
@@ -93,7 +106,7 @@ export const CodeDrawer: React.FC = () => {
               <button
                 onClick={resetStarterCode}
                 title="Reset to Starter Template"
-                className="flex items-center gap-1 rounded-md border border-slate-700/80 bg-slate-900/70 px-2 py-1 text-[10px] font-mono text-slate-300 transition hover:border-slate-500 hover:text-white"
+                className="flex items-center gap-1 rounded-lg border border-slate-700/60 bg-slate-900/70 px-2.5 py-1 text-[11px] font-mono text-slate-300 transition hover:border-slate-500/70 hover:text-slate-100"
               >
                 <RotateCcw className="h-3 w-3" />
                 <span>STARTER</span>
@@ -102,18 +115,18 @@ export const CodeDrawer: React.FC = () => {
               {screen === 'play' && (
                 <button
                   onClick={loadReferenceSolution}
-                  title="Load Reference Solution Hint"
-                  className="flex items-center gap-1 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-[10px] font-mono text-amber-200 transition hover:bg-amber-500/20"
+                  title="Load Reference Solution"
+                  className="flex items-center gap-1 rounded-lg border border-amber-400/35 bg-amber-500/12 px-2.5 py-1 text-[11px] font-mono text-amber-200 transition hover:bg-amber-500/20"
                 >
                   <Lightbulb className="h-3 w-3 text-neon-amber" />
-                  <span>HINT</span>
+                  <span>SOLUTION</span>
                 </button>
               )}
 
               <button
                 onClick={() => setCodeDrawerOpen(false)}
                 title="Close Code Drawer"
-                className="rounded-md p-1 text-slate-400 transition hover:bg-slate-800 hover:text-white"
+                className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-800/80 hover:text-slate-100"
               >
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -121,8 +134,8 @@ export const CodeDrawer: React.FC = () => {
           </div>
 
           {/* Clickable API Quick-Reference Pills */}
-          <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-800/80 bg-slate-950/60 px-3 py-2">
-            <span className="text-[9px] font-mono uppercase tracking-wider text-slate-500">
+          <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-700/60 bg-surface/60 px-3.5 py-2.5">
+            <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400">
               API:
             </span>
             {pills.map((pill) => (
@@ -130,7 +143,7 @@ export const CodeDrawer: React.FC = () => {
                 key={pill.label}
                 onClick={() => handleInsertSnippet(pill.snippet)}
                 title={`Click to append ${pill.snippet}`}
-                className="rounded border border-cyan-500/25 bg-cyan-500/10 px-1.5 py-0.5 text-[10px] font-mono text-cyan-200 transition hover:border-cyan-400/70 hover:bg-cyan-500/20"
+                className="rounded-md border border-sky-400/25 bg-sky-500/10 px-2 py-0.5 text-[11px] font-mono text-sky-200 transition hover:border-sky-400/50 hover:bg-sky-500/20"
               >
                 {pill.label}
               </button>
@@ -157,21 +170,21 @@ export const CodeDrawer: React.FC = () => {
 
           {/* Console Output / Error Banner */}
           {(codeError || codeLogs.length > 0) && (
-            <div className="axiom-scroll max-h-32 overflow-y-auto border-t border-slate-800 bg-slate-950/90 px-3.5 py-2.5 font-mono text-[11px]">
+            <div className="axiom-scroll max-h-36 overflow-y-auto border-t border-slate-700/60 bg-void/90 px-3.5 py-2.5 font-mono text-xs leading-relaxed">
               {codeError && (
-                <div className="mb-1.5 flex items-start gap-2 rounded-lg border border-crimson-500/40 bg-rose-950/50 p-2 text-rose-200">
+                <div className="mb-2 flex items-start gap-2 rounded-lg border border-rose-400/35 bg-rose-950/45 p-2.5 text-rose-200">
                   <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-neon-crimson" />
                   <span className="break-words">{codeError}</span>
                 </div>
               )}
               {codeLogs.length > 0 && (
-                <div className="space-y-0.5 text-slate-300">
-                  <div className="flex items-center gap-1 text-[10px] text-slate-500">
+                <div className="space-y-1 text-slate-300">
+                  <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-slate-400">
                     <Terminal className="h-3 w-3" />
-                    <span>CONSOLE OUTPUT</span>
+                    <span>Console Output</span>
                   </div>
                   {codeLogs.map((log, i) => (
-                    <div key={i} className="text-cyan-200/90">
+                    <div key={i} className="text-sky-200/90">
                       &gt; {log}
                     </div>
                   ))}
@@ -181,14 +194,14 @@ export const CodeDrawer: React.FC = () => {
           )}
 
           {/* Footer Run Bar */}
-          <div className="flex items-center justify-between border-t border-slate-800/90 bg-slate-950/80 px-3.5 py-2.5">
-            <span className="text-[10px] font-mono text-slate-500">
+          <div className="flex items-center justify-between border-t border-slate-700/60 bg-surface/75 px-3.5 py-2.5">
+            <span className="text-[11px] font-mono text-slate-400">
               Web Worker • 1.5s / 2k ops cap
             </span>
             <button
               onClick={() => void runCode()}
               disabled={isRunningCode}
-              className="glow-emerald flex items-center gap-2 rounded-lg border border-emerald-400/70 bg-emerald-500/20 px-4 py-1.5 text-xs font-mono font-bold text-emerald-100 transition hover:bg-emerald-500/30 disabled:opacity-50"
+              className="glow-emerald flex items-center gap-2 rounded-lg border border-emerald-400/50 bg-emerald-500/18 px-4 py-1.5 text-xs font-mono font-semibold text-emerald-100 transition hover:bg-emerald-500/28 disabled:opacity-50"
             >
               {isRunningCode ? (
                 <>

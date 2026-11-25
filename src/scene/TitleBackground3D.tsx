@@ -6,10 +6,11 @@ const MONOLITH_COUNT = 36;
 const PACKET_COUNT = 18;
 
 const PALETTE = [
-  new THREE.Color('#00F0FF'),
-  new THREE.Color('#A855F7'),
-  new THREE.Color('#00FF9D'),
-  new THREE.Color('#FFB800'),
+  new THREE.Color('#38BDF8'), // Sky-cyan
+  new THREE.Color('#2DD4BF'), // Luminous teal
+  new THREE.Color('#A78BFA'), // Soft lavender-violet
+  new THREE.Color('#FBBF24'), // Warm gold-amber
+  new THREE.Color('#34D399'), // Calm emerald
 ];
 
 interface MonolithSeed {
@@ -35,8 +36,13 @@ export function TitleBackground3D() {
   const monolithBodyRef = useRef<THREE.InstancedMesh | null>(null);
   const monolithCapRef = useRef<THREE.InstancedMesh | null>(null);
   const packetsRef = useRef<THREE.InstancedMesh | null>(null);
-  const coreRef = useRef<THREE.Mesh | null>(null);
+  const coreGroupRef = useRef<THREE.Group | null>(null);
+  const innerCrystalRef = useRef<THREE.Mesh | null>(null);
+  const gyroARef = useRef<THREE.Mesh | null>(null);
+  const gyroBRef = useRef<THREE.Mesh | null>(null);
+  const satellitesRef = useRef<THREE.Group | null>(null);
   const outerRingRef = useRef<THREE.Mesh | null>(null);
+  const innerRingRef = useRef<THREE.Mesh | null>(null);
 
   const dummy = useMemo(() => new THREE.Object3D(), []);
 
@@ -52,8 +58,8 @@ export function TitleBackground3D() {
           x,
           z,
           baseH: 0.45 + ((idx * 17) % 10) * 0.16 + Math.max(0, 1.2 - dist * 0.12),
-          amp: 0.16 + ((idx * 13) % 5) * 0.05,
-          speed: 0.7 + ((idx * 7) % 5) * 0.22,
+          amp: 0.14 + ((idx * 13) % 5) * 0.045,
+          speed: 0.55 + ((idx * 7) % 5) * 0.18,
           phase: idx * 0.65,
           colorIdx: idx % PALETTE.length,
         });
@@ -70,7 +76,7 @@ export function TitleBackground3D() {
       items.push({
         axis: i % 2 === 0 ? 'x' : 'z',
         lane: lanes[i % lanes.length],
-        speed: 2.2 + (i % 4) * 0.85,
+        speed: 1.9 + (i % 4) * 0.7,
         dir: i % 3 === 0 ? -1 : 1,
         offset: (i * 3.1) % 20,
         colorIdx: i % PALETTE.length,
@@ -111,12 +117,12 @@ export function TitleBackground3D() {
 
         dummy.position.set(m.x, h * 0.5, m.z);
         dummy.rotation.set(0, 0, 0);
-        dummy.scale.set(0.86, h, 0.86);
+        dummy.scale.set(0.84, h, 0.84);
         dummy.updateMatrix();
         monolithBodyRef.current.setMatrixAt(i, dummy.matrix);
 
-        dummy.position.set(m.x, h + 0.045, m.z);
-        dummy.scale.set(0.88, 0.07, 0.88);
+        dummy.position.set(m.x, h + 0.04, m.z);
+        dummy.scale.set(0.88, 0.06, 0.88);
         dummy.updateMatrix();
         monolithCapRef.current.setMatrixAt(i, dummy.matrix);
       }
@@ -134,104 +140,201 @@ export function TitleBackground3D() {
         const z = p.axis === 'z' ? coord : p.lane;
 
         dummy.position.set(x, 0.22, z);
-        dummy.rotation.set(t * 2.4, t * 1.8, 0);
-        dummy.scale.set(0.18, 0.18, 0.18);
+        dummy.rotation.set(t * 1.8, t * 1.4, 0);
+        dummy.scale.set(0.16, 0.16, 0.16);
         dummy.updateMatrix();
         packetsRef.current.setMatrixAt(i, dummy.matrix);
       }
       packetsRef.current.instanceMatrix.needsUpdate = true;
     }
 
-    if (coreRef.current) {
-      coreRef.current.rotation.y += dt * 0.55;
-      coreRef.current.rotation.x = Math.sin(t * 0.6) * 0.25;
-      coreRef.current.position.y = 2.0 + Math.sin(t * 1.5) * 0.22;
+    if (coreGroupRef.current) {
+      coreGroupRef.current.position.y = 2.05 + Math.sin(t * 1.2) * 0.18;
+    }
+
+    if (innerCrystalRef.current) {
+      innerCrystalRef.current.rotation.y += dt * 0.48;
+      innerCrystalRef.current.rotation.x = Math.sin(t * 0.5) * 0.2;
+    }
+
+    if (gyroARef.current) {
+      gyroARef.current.rotation.x += dt * 0.32;
+      gyroARef.current.rotation.y += dt * 0.24;
+    }
+
+    if (gyroBRef.current) {
+      gyroBRef.current.rotation.y -= dt * 0.28;
+      gyroBRef.current.rotation.z += dt * 0.22;
+    }
+
+    if (satellitesRef.current) {
+      satellitesRef.current.rotation.y += dt * 0.42;
     }
 
     if (outerRingRef.current) {
-      outerRingRef.current.rotation.z -= dt * 0.35;
+      outerRingRef.current.rotation.z -= dt * 0.24;
+    }
+
+    if (innerRingRef.current) {
+      innerRingRef.current.rotation.z += dt * 0.34;
     }
   });
 
   return (
     <group>
-      {/* Glowing circuit rails */}
+      {/* Calm luminous circuit rails */}
       {rails.map((lane) => (
         <group key={lane}>
           <mesh position={[0, 0.03, lane]}>
-            <boxGeometry args={[20, 0.03, 0.06]} />
+            <boxGeometry args={[20, 0.028, 0.055]} />
             <meshStandardMaterial
-              color="#0D2240"
-              emissive="#00F0FF"
-              emissiveIntensity={0.45}
-              roughness={0.4}
+              color="#14233C"
+              emissive="#38BDF8"
+              emissiveIntensity={0.28}
+              roughness={0.45}
             />
           </mesh>
           <mesh position={[lane, 0.03, 0]}>
-            <boxGeometry args={[0.06, 0.03, 20]} />
+            <boxGeometry args={[0.055, 0.028, 20]} />
             <meshStandardMaterial
-              color="#1A1538"
-              emissive="#A855F7"
-              emissiveIntensity={0.38}
-              roughness={0.4}
+              color="#1C1A3A"
+              emissive="#A78BFA"
+              emissiveIntensity={0.24}
+              roughness={0.45}
             />
           </mesh>
         </group>
       ))}
 
-      {/* Extruded obsidian monolith bodies */}
+      {/* Extruded Midnight Slate monolith bodies */}
       <instancedMesh ref={monolithBodyRef} args={[undefined, undefined, monoliths.length]} castShadow receiveShadow>
         <boxGeometry args={[1, 1, 1]} />
-        <meshStandardMaterial color="#0D1426" roughness={0.45} metalness={0.65} />
+        <meshStandardMaterial color="#131D33" roughness={0.42} metalness={0.62} />
       </instancedMesh>
 
-      {/* Neon monolith top caps */}
+      {/* Calm luminous monolith top caps */}
       <instancedMesh ref={monolithCapRef} args={[undefined, undefined, monoliths.length]}>
         <boxGeometry args={[1, 1, 1]} />
         <meshStandardMaterial
           color="#ffffff"
           emissive="#ffffff"
-          emissiveIntensity={1.6}
+          emissiveIntensity={1.25}
           toneMapped={false}
-          roughness={0.2}
+          roughness={0.24}
         />
       </instancedMesh>
 
-      {/* Traveling glowing data-packet orbs */}
+      {/* Traveling data-packet crystals */}
       <instancedMesh ref={packetsRef} args={[undefined, undefined, packets.length]}>
         <octahedronGeometry args={[1, 0]} />
         <meshStandardMaterial
           color="#ffffff"
           emissive="#ffffff"
-          emissiveIntensity={2.2}
+          emissiveIntensity={1.45}
           toneMapped={false}
-          roughness={0.1}
+          roughness={0.18}
         />
       </instancedMesh>
 
-      {/* Central floating AXIOM core */}
-      <mesh ref={coreRef} position={[0, 2.0, 0]}>
-        <octahedronGeometry args={[1.05, 0]} />
-        <meshStandardMaterial
-          color="#081C2E"
-          emissive="#00F0FF"
-          emissiveIntensity={1.7}
-          toneMapped={false}
-          wireframe
-        />
-      </mesh>
+      {/* Central floating AXIOM core: frosted crystal + wireframe cage + orbital rings + satellites */}
+      <group ref={coreGroupRef} position={[0, 2.05, 0]}>
+        {/* Inner glowing crystal core */}
+        <mesh ref={innerCrystalRef}>
+          <octahedronGeometry args={[0.68, 0]} />
+          <meshStandardMaterial
+            color="#10293D"
+            emissive="#2DD4BF"
+            emissiveIntensity={1.25}
+            roughness={0.18}
+            metalness={0.35}
+            transparent
+            opacity={0.86}
+            toneMapped={false}
+          />
+        </mesh>
 
-      {/* Central holographic base rings */}
-      <mesh ref={outerRingRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.08, 0]}>
-        <ringGeometry args={[1.65, 1.85, 6]} />
-        <meshStandardMaterial
-          color="#00F0FF"
-          emissive="#00F0FF"
-          emissiveIntensity={1.6}
-          toneMapped={false}
-          side={THREE.DoubleSide}
-        />
-      </mesh>
+        {/* Outer geometric wireframe shell */}
+        <mesh rotation={[0.3, 0.6, 0]}>
+          <octahedronGeometry args={[1.08, 0]} />
+          <meshStandardMaterial
+            color="#38BDF8"
+            emissive="#38BDF8"
+            emissiveIntensity={1.15}
+            toneMapped={false}
+            wireframe
+          />
+        </mesh>
+
+        {/* Orbital gyroscope ring A (sky-cyan) */}
+        <mesh ref={gyroARef} rotation={[Math.PI / 3, 0.2, 0]}>
+          <torusGeometry args={[1.45, 0.028, 12, 48]} />
+          <meshStandardMaterial
+            color="#38BDF8"
+            emissive="#38BDF8"
+            emissiveIntensity={1.15}
+            toneMapped={false}
+            roughness={0.25}
+            metalness={0.6}
+          />
+        </mesh>
+
+        {/* Orbital gyroscope ring B (lavender-violet) */}
+        <mesh ref={gyroBRef} rotation={[-Math.PI / 3.2, 0.6, 0.3]}>
+          <torusGeometry args={[1.72, 0.024, 12, 48]} />
+          <meshStandardMaterial
+            color="#A78BFA"
+            emissive="#A78BFA"
+            emissiveIntensity={1.1}
+            toneMapped={false}
+            roughness={0.25}
+            metalness={0.6}
+          />
+        </mesh>
+
+        {/* Orbiting satellite crystals */}
+        <group ref={satellitesRef}>
+          <mesh position={[1.95, 0.15, 0]}>
+            <octahedronGeometry args={[0.13, 0]} />
+            <meshStandardMaterial color="#2DD4BF" emissive="#2DD4BF" emissiveIntensity={1.35} toneMapped={false} />
+          </mesh>
+          <mesh position={[-0.98, -0.1, 1.69]}>
+            <octahedronGeometry args={[0.12, 0]} />
+            <meshStandardMaterial color="#FBBF24" emissive="#FBBF24" emissiveIntensity={1.35} toneMapped={false} />
+          </mesh>
+          <mesh position={[-0.98, 0.22, -1.69]}>
+            <octahedronGeometry args={[0.12, 0]} />
+            <meshStandardMaterial color="#A78BFA" emissive="#A78BFA" emissiveIntensity={1.35} toneMapped={false} />
+          </mesh>
+        </group>
+      </group>
+
+      {/* Stacked central holographic base plinth */}
+      <group position={[0, 0, 0]}>
+        <mesh position={[0, 0.06, 0]} receiveShadow>
+          <cylinderGeometry args={[1.45, 1.62, 0.12, 6]} />
+          <meshStandardMaterial color="#131D33" roughness={0.38} metalness={0.72} />
+        </mesh>
+        <mesh ref={innerRingRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.13, 0]}>
+          <ringGeometry args={[1.05, 1.2, 6]} />
+          <meshStandardMaterial
+            color="#2DD4BF"
+            emissive="#2DD4BF"
+            emissiveIntensity={1.15}
+            toneMapped={false}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+        <mesh ref={outerRingRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.08, 0]}>
+          <ringGeometry args={[1.72, 1.9, 6]} />
+          <meshStandardMaterial
+            color="#38BDF8"
+            emissive="#38BDF8"
+            emissiveIntensity={1.2}
+            toneMapped={false}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+      </group>
     </group>
   );
 }

@@ -6,8 +6,11 @@ import type {
   PathfindingWorldState,
   SandboxPreset,
   StacksQueuesWorldState,
+  TreeNode,
+  TreesWorldState,
   WorldId,
 } from '../engine/types';
+import { recomputeTreeLayoutAndMetrics } from '../engine/worlds/treesEngine';
 
 function makeGrid(
   width: number,
@@ -52,6 +55,40 @@ function makeGrid(
     peakFrontier: 0,
     pathFound: false,
   };
+}
+
+function makeTreePreset(
+  rootId: string,
+  specs: Array<{
+    id: string;
+    value: number;
+    leftId: string | null;
+    rightId: string | null;
+  }>,
+): TreesWorldState {
+  const nodes: Record<string, TreeNode> = {};
+  for (const s of specs) {
+    nodes[s.id] = {
+      id: s.id,
+      value: s.value,
+      leftId: s.leftId,
+      rightId: s.rightId,
+      pos: [0, 0, 0],
+    };
+  }
+  const state: TreesWorldState = {
+    world: 'trees',
+    mode: 'sandbox',
+    nodes,
+    rootId,
+    selectedNodeId: rootId,
+    pendingQueue: [],
+    visitedSequence: [],
+    showBalanceFactors: true,
+    invariantViolations: 0,
+  };
+  recomputeTreeLayoutAndMetrics(state);
+  return state;
 }
 
 const DEFAULT_ARRAYS: ArraysWorldState = {
@@ -107,11 +144,11 @@ const CYCLIC_TETHER_MATRIX: LinkedListWorldState = {
 const DEFAULT_STACKS_QUEUES: StacksQueuesWorldState = {
   world: 'stacks-queues',
   inputStream: [
-    { id: 'sb-p0', value: 'A', color: '#00F0FF' },
-    { id: 'sb-p1', value: 'B', color: '#A855F7' },
-    { id: 'sb-p2', value: 'C', color: '#FFB800' },
-    { id: 'sb-p3', value: 'D', color: '#00FF9D' },
-    { id: 'sb-p4', value: 'E', color: '#38BDF8' },
+    { id: 'sb-p0', value: 'A', color: '#38BDF8' },
+    { id: 'sb-p1', value: 'B', color: '#A78BFA' },
+    { id: 'sb-p2', value: 'C', color: '#FBBF24' },
+    { id: 'sb-p3', value: 'D', color: '#34D399' },
+    { id: 'sb-p4', value: 'E', color: '#2DD4BF' },
   ],
   buffers: {
     stackA: {
@@ -136,12 +173,12 @@ const DEFAULT_STACKS_QUEUES: StacksQueuesWorldState = {
 const DUAL_BUFFER_STRESS: StacksQueuesWorldState = {
   world: 'stacks-queues',
   inputStream: [
-    { id: 'db-p0', value: 'X1', color: '#FF2A5F' },
-    { id: 'db-p1', value: 'X2', color: '#FFB800' },
-    { id: 'db-p2', value: 'X3', color: '#00F0FF' },
-    { id: 'db-p3', value: 'X4', color: '#A855F7' },
-    { id: 'db-p4', value: 'X5', color: '#00FF9D' },
-    { id: 'db-p5', value: 'X6', color: '#38BDF8' },
+    { id: 'db-p0', value: 'X1', color: '#FB7185' },
+    { id: 'db-p1', value: 'X2', color: '#FBBF24' },
+    { id: 'db-p2', value: 'X3', color: '#38BDF8' },
+    { id: 'db-p3', value: 'X4', color: '#A78BFA' },
+    { id: 'db-p4', value: 'X5', color: '#34D399' },
+    { id: 'db-p5', value: 'X6', color: '#2DD4BF' },
   ],
   buffers: {
     inStack: {
@@ -252,11 +289,66 @@ const SPIRAL_LABYRINTH: PathfindingWorldState = makeGrid(
   ],
 );
 
+const CONCAVE_TRAP_ARENA: PathfindingWorldState = makeGrid(
+  10,
+  10,
+  [1, 4],
+  [8, 4],
+  [
+    [3, 2],
+    [4, 2],
+    [5, 2],
+    [5, 3],
+    [5, 5],
+    [5, 6],
+    [3, 6],
+    [4, 6],
+  ],
+  [
+    [3, 3, 5],
+    [3, 4, 5],
+    [3, 5, 5],
+    [4, 3, 5],
+    [4, 4, 5],
+    [4, 5, 5],
+    [5, 4, 5],
+    [6, 4, 5],
+  ],
+);
+
+const BALANCED_BST_7: TreesWorldState = makeTreePreset('t1', [
+  { id: 't1', value: 50, leftId: 't2', rightId: 't3' },
+  { id: 't2', value: 25, leftId: 't4', rightId: 't5' },
+  { id: 't3', value: 75, leftId: 't6', rightId: 't7' },
+  { id: 't4', value: 12, leftId: null, rightId: null },
+  { id: 't5', value: 37, leftId: null, rightId: null },
+  { id: 't6', value: 62, leftId: null, rightId: null },
+  { id: 't7', value: 88, leftId: null, rightId: null },
+]);
+
+const RIGHT_SKEWED_AVL: TreesWorldState = makeTreePreset('t1', [
+  { id: 't1', value: 10, leftId: null, rightId: 't2' },
+  { id: 't2', value: 20, leftId: null, rightId: 't3' },
+  { id: 't3', value: 30, leftId: null, rightId: 't4' },
+  { id: 't4', value: 40, leftId: null, rightId: 't5' },
+  { id: 't5', value: 50, leftId: null, rightId: null },
+]);
+
+const ZIGZAG_LR_STRESS: TreesWorldState = makeTreePreset('t1', [
+  { id: 't1', value: 50, leftId: 't2', rightId: 't6' },
+  { id: 't2', value: 20, leftId: null, rightId: 't3' },
+  { id: 't3', value: 35, leftId: 't4', rightId: 't5' },
+  { id: 't4', value: 28, leftId: null, rightId: null },
+  { id: 't5', value: 42, leftId: null, rightId: null },
+  { id: 't6', value: 70, leftId: null, rightId: null },
+]);
+
 export const SANDBOX_DEFAULTS: Record<WorldId, AnyWorldState> = {
   arrays: DEFAULT_ARRAYS,
   'linked-lists': DEFAULT_LINKED_LIST,
   'stacks-queues': DEFAULT_STACKS_QUEUES,
   pathfinding: WEIGHTED_CANYON_MAZE,
+  trees: BALANCED_BST_7,
 };
 
 export const SANDBOX_PRESETS_BUILTIN: SandboxPreset[] = [
@@ -315,5 +407,33 @@ export const SANDBOX_PRESETS_BUILTIN: SandboxPreset[] = [
     worldId: 'pathfinding',
     createdAt: 1700000008000,
     state: SPIRAL_LABYRINTH,
+  },
+  {
+    id: 'builtin-pf-concave',
+    name: 'Concave Trap Arena',
+    worldId: 'pathfinding',
+    createdAt: 1700000009000,
+    state: CONCAVE_TRAP_ARENA,
+  },
+  {
+    id: 'builtin-trees-balanced',
+    name: 'Balanced 7-Node BST',
+    worldId: 'trees',
+    createdAt: 1700000010000,
+    state: BALANCED_BST_7,
+  },
+  {
+    id: 'builtin-trees-skewed',
+    name: 'Right-Skewed Chain (AVL)',
+    worldId: 'trees',
+    createdAt: 1700000011000,
+    state: RIGHT_SKEWED_AVL,
+  },
+  {
+    id: 'builtin-trees-zigzag',
+    name: 'Zig-Zag LR Stress Tree',
+    worldId: 'trees',
+    createdAt: 1700000012000,
+    state: ZIGZAG_LR_STRESS,
   },
 ];

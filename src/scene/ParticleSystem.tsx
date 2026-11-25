@@ -12,18 +12,23 @@ const AMBIENT_COUNT = 56;
 const BURST_COUNT = 160;
 const TOTAL_COUNT = AMBIENT_COUNT + BURST_COUNT;
 
-const COLOR_CYAN = new THREE.Color('#00F0FF');
-const COLOR_AMBER = new THREE.Color('#FFB800');
-const COLOR_EMERALD = new THREE.Color('#00FF9D');
-const COLOR_CRIMSON = new THREE.Color('#FF2A5F');
-const COLOR_VIOLET = new THREE.Color('#A855F7');
+const COLOR_CYAN = new THREE.Color('#38BDF8');
+const COLOR_TEAL = new THREE.Color('#2DD4BF');
+const COLOR_AMBER = new THREE.Color('#FBBF24');
+const COLOR_EMERALD = new THREE.Color('#34D399');
+const COLOR_CRIMSON = new THREE.Color('#FB7185');
+const COLOR_VIOLET = new THREE.Color('#A78BFA');
 
 function getEventColor(type: SimEventType): THREE.Color {
   switch (type) {
     case 'SWAP':
     case 'COMPARE':
     case 'RELAX_EDGE':
+    case 'ROTATE_LEFT':
+    case 'ROTATE_RIGHT':
       return COLOR_AMBER;
+    case 'INSERT_NODE':
+      return COLOR_TEAL;
     case 'SUCCESS':
     case 'PATH_FOUND':
       return COLOR_EMERALD;
@@ -34,12 +39,15 @@ function getEventColor(type: SimEventType): THREE.Color {
     case 'BOUNDS_FAULT':
     case 'CYCLE_DETECTED':
     case 'NO_PATH':
+    case 'INVARIANT_FAULT':
     case 'FAIL':
       return COLOR_CRIMSON;
     case 'POP':
     case 'DEQUEUE':
     case 'UNLINK':
+    case 'DELETE_NODE':
       return COLOR_VIOLET;
+    case 'PROBE':
     default:
       return COLOR_CYAN;
   }
@@ -71,6 +79,11 @@ function getBurstOrigin(
     const node = worldState.nodes[target];
     if (node) {
       out.set(node.pos[0], node.pos[1] + 1.2, node.pos[2]);
+    }
+  } else if (worldState.world === 'trees') {
+    const node = worldState.nodes[target];
+    if (node) {
+      out.set(node.pos[0], node.pos[1] + 1.0, node.pos[2]);
     }
   } else if (worldState.world === 'pathfinding') {
     const parts = target.split(',');
@@ -173,6 +186,7 @@ export function ParticleSystem({ activeEvent, worldState }: ParticleSystemProps)
       activeEvent.type === 'MEMORY_LEAK' ||
       activeEvent.type === 'OVERFLOW' ||
       activeEvent.type === 'NULL_DEREF' ||
+      activeEvent.type === 'INVARIANT_FAULT' ||
       activeEvent.type === 'FAIL';
 
     const count = isVictory ? 48 : isError ? 34 : 20;
@@ -295,9 +309,9 @@ export function ParticleSystem({ activeEvent, worldState }: ParticleSystemProps)
       <meshStandardMaterial
         color="#ffffff"
         emissive="#ffffff"
-        emissiveIntensity={2.0}
+        emissiveIntensity={1.45}
         toneMapped={false}
-        roughness={0.2}
+        roughness={0.22}
       />
     </instancedMesh>
   );

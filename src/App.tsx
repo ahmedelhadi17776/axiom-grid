@@ -29,7 +29,11 @@ export function App() {
     if (!timeline.isPlaying) return;
 
     const baseDelayMs =
-      worldState.world === 'pathfinding' ? 110 : 380;
+      worldState.world === 'pathfinding'
+        ? 110
+        : worldState.world === 'trees'
+          ? 320
+          : 380;
     const intervalMs = Math.max(35, Math.round(baseDelayMs / timeline.speed));
 
     const timer = window.setInterval(() => {

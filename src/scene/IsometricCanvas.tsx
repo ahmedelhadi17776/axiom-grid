@@ -9,6 +9,7 @@ import { ArraysScene3D } from './worlds/ArraysScene3D';
 import { LinkedListScene3D } from './worlds/LinkedListScene3D';
 import { StacksQueuesScene3D } from './worlds/StacksQueuesScene3D';
 import { PathfindingScene3D } from './worlds/PathfindingScene3D';
+import { TreesScene3D } from './worlds/TreesScene3D';
 
 export interface DirectAction {
   world: WorldId;
@@ -50,8 +51,8 @@ class WebGLErrorBoundary extends Component<BoundaryProps, BoundaryState> {
   public render(): ReactNode {
     if (this.state.hasError) {
       return (
-        <div className="flex h-full w-full flex-col items-center justify-center bg-[#06080F] p-6 text-center text-slate-200">
-          <div className="max-w-md rounded-xl border border-cyan-500/30 bg-[#0B1222]/90 p-6 shadow-2xl">
+        <div className="flex h-full w-full flex-col items-center justify-center bg-[#0B101C] p-6 text-center text-slate-200">
+          <div className="max-w-md rounded-xl border border-sky-400/25 bg-[#11192B]/90 p-6 shadow-2xl">
             <div className="mb-2 font-mono text-xs uppercase tracking-widest text-cyan-400">
               AXIOM // GRID — 3D Fallback
             </div>
@@ -90,7 +91,7 @@ export function IsometricCanvas({
 }: IsometricCanvasProps) {
   return (
     <WebGLErrorBoundary>
-      <div className="relative h-full w-full select-none bg-[#06080F]">
+      <div className="relative h-full w-full select-none bg-[#0B101C]">
         <Canvas
           shadows={graphicsQuality === 'high'}
           orthographic
@@ -136,6 +137,13 @@ export function IsometricCanvas({
                   state={worldState}
                   interactive={interactive}
                   paintTool={paintTool}
+                  onDirectAction={onDirectAction}
+                />
+              )}
+              {worldState.world === 'trees' && (
+                <TreesScene3D
+                  state={worldState}
+                  interactive={interactive}
                   onDirectAction={onDirectAction}
                 />
               )}

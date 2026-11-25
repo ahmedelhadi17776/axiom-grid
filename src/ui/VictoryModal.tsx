@@ -43,10 +43,10 @@ export const VictoryModal: React.FC = () => {
   const nextLevel = getNextLevel(activeLevelId);
 
   const rankColors: Record<string, string> = {
-    S: 'border-emerald-400 text-neon-emerald bg-emerald-500/20 glow-emerald',
-    A: 'border-cyan-400 text-neon-cyan bg-cyan-500/20 glow-cyan',
-    B: 'border-amber-400 text-neon-amber bg-amber-500/20 glow-amber',
-    C: 'border-slate-400 text-slate-200 bg-slate-500/20',
+    S: 'border-emerald-400/70 text-neon-emerald bg-emerald-500/15 glow-emerald',
+    A: 'border-sky-400/70 text-neon-cyan bg-sky-500/15 glow-cyan',
+    B: 'border-amber-400/70 text-neon-amber bg-amber-500/15 glow-amber',
+    C: 'border-slate-500/70 text-slate-200 bg-slate-500/15',
   };
 
   const rankStyle = rankColors[scoreReport.rank ?? 'C'] ?? rankColors.C;
@@ -57,18 +57,18 @@ export const VictoryModal: React.FC = () => {
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       onClick={dismissVictoryModal}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-void/70 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-void/75 p-4 backdrop-blur-sm"
     >
       <motion.div
-        initial={{ scale: 0.9, y: 20, opacity: 0 }}
+        initial={{ scale: 0.92, y: 18, opacity: 0 }}
         animate={{ scale: 1, y: 0, opacity: 1 }}
-        exit={{ scale: 0.95, opacity: 0 }}
+        exit={{ scale: 0.96, opacity: 0 }}
         transition={{ type: 'spring', stiffness: 280, damping: 24 }}
         onClick={(e) => e.stopPropagation()}
-        className="glass-panel relative w-full max-w-xl overflow-hidden rounded-3xl border-emerald-400/40 p-6 md:p-8"
+        className="glass-panel relative w-full max-w-xl overflow-hidden rounded-3xl border-emerald-400/30 p-6 md:p-8"
       >
-        {/* Top neon accent */}
-        <div className="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-neon-cyan via-neon-emerald to-neon-amber" />
+        {/* Top luminous accent */}
+        <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-neon-cyan via-neon-emerald to-neon-teal opacity-85" />
 
         {/* Close / Inspect Board button */}
         <button
@@ -76,7 +76,7 @@ export const VictoryModal: React.FC = () => {
           onClick={dismissVictoryModal}
           aria-label="Inspect Board"
           title="Inspect Board (Esc)"
-          className="absolute right-4 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-lg border border-slate-700/80 bg-slate-900/80 text-slate-400 transition hover:border-cyan-400/60 hover:bg-cyan-500/15 hover:text-cyan-200"
+          className="absolute right-4 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-lg border border-slate-700/60 bg-slate-900/75 text-slate-400 transition hover:border-sky-400/45 hover:bg-sky-500/15 hover:text-sky-200"
         >
           <X className="h-4 w-4" />
         </button>
@@ -84,22 +84,22 @@ export const VictoryModal: React.FC = () => {
         {/* Header & Rank Badge */}
         <div className="flex items-start justify-between gap-4 pr-10">
           <div>
-            <div className="text-[11px] font-mono tracking-[0.2em] text-neon-emerald">
+            <div className="text-xs font-mono tracking-[0.18em] text-neon-emerald">
               CIRCUIT VERIFIED // {level?.code}
             </div>
-            <h2 className="mt-1 text-2xl font-bold tracking-wide text-white">
+            <h2 className="mt-1 text-2xl font-bold tracking-wide text-slate-100">
               {level?.title ?? 'Level Complete'}
             </h2>
           </div>
 
           {scoreReport.rank && (
             <motion.div
-              initial={{ rotate: -15, scale: 0.4 }}
+              initial={{ rotate: -12, scale: 0.5 }}
               animate={{ rotate: 0, scale: 1 }}
-              transition={{ delay: 0.2, type: 'spring', stiffness: 320 }}
-              className={`flex h-16 w-16 flex-col items-center justify-center rounded-2xl border-2 font-mono ${rankStyle}`}
+              transition={{ delay: 0.18, type: 'spring', stiffness: 320 }}
+              className={`flex h-16 w-16 flex-col items-center justify-center rounded-2xl border font-mono ${rankStyle}`}
             >
-              <span className="text-[9px] tracking-widest opacity-80">RANK</span>
+              <span className="text-[10px] tracking-widest opacity-80">RANK</span>
               <span className="text-3xl font-black leading-none">
                 {scoreReport.rank}
               </span>
@@ -114,10 +114,10 @@ export const VictoryModal: React.FC = () => {
             return (
               <motion.div
                 key={n}
-                initial={{ scale: 0, rotate: -30 }}
+                initial={{ scale: 0, rotate: -24 }}
                 animate={{ scale: 1, rotate: 0 }}
                 transition={{
-                  delay: 0.1 + n * 0.12,
+                  delay: 0.1 + n * 0.1,
                   type: 'spring',
                   stiffness: 300,
                 }}
@@ -125,7 +125,7 @@ export const VictoryModal: React.FC = () => {
                 <Star
                   className={`h-10 w-10 ${
                     earned
-                      ? 'fill-neon-amber text-neon-amber drop-shadow-[0_0_12px_rgba(255,184,0,0.8)]'
+                      ? 'fill-neon-amber text-neon-amber drop-shadow-[0_0_10px_rgba(251,191,36,0.55)]'
                       : 'text-slate-700'
                   }`}
                 />
@@ -136,13 +136,13 @@ export const VictoryModal: React.FC = () => {
 
         {/* Metrics Breakdown */}
         <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-xl border border-slate-700/70 bg-slate-950/75 p-3">
-            <div className="flex items-center gap-1.5 text-[10px] font-mono tracking-wider text-slate-400">
+          <div className="rounded-xl border border-slate-700/60 bg-surface/75 p-3.5">
+            <div className="flex items-center gap-1.5 text-[11px] font-mono tracking-wider text-slate-400">
               <Cpu className="h-3.5 w-3.5 text-neon-cyan" />
               <span>CYCLES USED</span>
             </div>
-            <div className="mt-1 flex items-baseline gap-2 font-mono">
-              <span className="text-2xl font-bold text-white">
+            <div className="mt-1.5 flex items-baseline gap-2 font-mono">
+              <span className="text-2xl font-bold text-slate-100">
                 {scoreReport.metrics.cycles}
               </span>
               {level && (
@@ -153,11 +153,11 @@ export const VictoryModal: React.FC = () => {
             </div>
           </div>
 
-          <div className="rounded-xl border border-slate-700/70 bg-slate-950/75 p-3">
-            <div className="text-[10px] font-mono tracking-wider text-slate-400">
+          <div className="rounded-xl border border-slate-700/60 bg-surface/75 p-3.5">
+            <div className="text-[11px] font-mono tracking-wider text-slate-400">
               AUX MEMORY
             </div>
-            <div className="mt-1 flex items-baseline gap-2 font-mono">
+            <div className="mt-1.5 flex items-baseline gap-2 font-mono">
               <span className="text-2xl font-bold text-neon-violet">
                 {scoreReport.metrics.auxMemory}
               </span>
@@ -171,22 +171,22 @@ export const VictoryModal: React.FC = () => {
         </div>
 
         {/* Big-O Conceptual Insight */}
-        <div className="mt-4 rounded-xl border border-cyan-500/30 bg-cyan-950/25 p-3.5">
-          <div className="flex items-center gap-1.5 text-[11px] font-mono font-semibold text-neon-cyan">
+        <div className="mt-4 rounded-xl border border-sky-400/25 bg-sky-950/25 p-4">
+          <div className="flex items-center gap-1.5 text-xs font-mono font-semibold text-neon-cyan">
             <Lightbulb className="h-3.5 w-3.5" />
             <span>BIG-O INSIGHT ({level?.par.targetBigO})</span>
           </div>
-          <p className="mt-1 text-xs leading-relaxed text-slate-200">
+          <p className="mt-1.5 text-xs leading-relaxed text-slate-200">
             {scoreReport.insight}
           </p>
         </div>
 
         {/* Action Buttons */}
-        <div className="mt-6 flex flex-wrap items-center justify-between gap-2">
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-2.5">
           <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={goToHub}
-              className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-900/80 px-3.5 py-2.5 text-xs font-mono text-slate-300 transition hover:border-slate-500 hover:text-white"
+              className="flex items-center gap-1.5 rounded-xl border border-slate-700/60 bg-slate-900/75 px-3.5 py-2.5 text-xs font-mono text-slate-300 transition hover:border-slate-500/70 hover:text-slate-100"
             >
               <LayoutGrid className="h-3.5 w-3.5" />
               <span>WORLD HUB</span>
@@ -194,7 +194,7 @@ export const VictoryModal: React.FC = () => {
 
             <button
               onClick={dismissVictoryModal}
-              className="flex items-center gap-1.5 rounded-xl border border-cyan-400/60 bg-cyan-500/15 px-3.5 py-2.5 text-xs font-mono font-semibold text-cyan-100 transition hover:bg-cyan-500/25"
+              className="flex items-center gap-1.5 rounded-xl border border-sky-400/45 bg-sky-500/14 px-3.5 py-2.5 text-xs font-mono font-semibold text-sky-100 transition hover:bg-sky-500/22"
             >
               <Eye className="h-3.5 w-3.5 text-neon-cyan" />
               <span>INSPECT STATE</span>
@@ -207,7 +207,7 @@ export const VictoryModal: React.FC = () => {
                 dismissVictoryModal();
                 resetLevel();
               }}
-              className="flex items-center gap-1.5 rounded-xl border border-amber-400/50 bg-amber-500/10 px-3.5 py-2.5 text-xs font-mono font-semibold text-amber-200 transition hover:bg-amber-500/20"
+              className="flex items-center gap-1.5 rounded-xl border border-amber-400/40 bg-amber-500/12 px-3.5 py-2.5 text-xs font-mono font-semibold text-amber-200 transition hover:bg-amber-500/20"
             >
               <RotateCcw className="h-3.5 w-3.5" />
               <span>OPTIMIZE</span>
@@ -216,7 +216,7 @@ export const VictoryModal: React.FC = () => {
             {nextLevel && (
               <button
                 onClick={() => startLevel(nextLevel.id)}
-                className="glow-emerald flex items-center gap-1.5 rounded-xl border border-emerald-400/70 bg-emerald-500/20 px-4 py-2.5 text-xs font-mono font-bold text-emerald-100 transition hover:bg-emerald-500/30"
+                className="glow-emerald flex items-center gap-1.5 rounded-xl border border-emerald-400/50 bg-emerald-500/20 px-4 py-2.5 text-xs font-mono font-bold text-emerald-100 transition hover:bg-emerald-500/30"
               >
                 <span>NEXT: {nextLevel.code}</span>
                 <ArrowRight className="h-3.5 w-3.5" />

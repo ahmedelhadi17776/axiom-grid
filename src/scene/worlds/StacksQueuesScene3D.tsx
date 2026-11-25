@@ -25,35 +25,54 @@ function PacketCube({
   scale?: number;
   overrideColor?: string;
 }) {
-  const color = overrideColor ?? item.color ?? '#00F0FF';
+  const color = overrideColor ?? item.color ?? '#38BDF8';
+  const bodyH = scale * 0.74;
+
   return (
     <group position={position}>
+      {/* Bottom metallic bevel foot */}
+      <mesh position={[0, -bodyH * 0.5 - 0.025, 0]} castShadow>
+        <boxGeometry args={[scale * 0.94, 0.05, scale * 0.94]} />
+        <meshStandardMaterial color="#101829" roughness={0.35} metalness={0.75} />
+      </mesh>
+
+      {/* Main metallic packet chassis */}
       <mesh castShadow>
-        <boxGeometry args={[scale, scale * 0.82, scale]} />
+        <boxGeometry args={[scale, bodyH, scale]} />
         <meshStandardMaterial
-          color="#0F1B33"
+          color="#142038"
           emissive={color}
-          emissiveIntensity={0.75}
-          roughness={0.28}
-          metalness={0.55}
+          emissiveIntensity={0.32}
+          roughness={0.3}
+          metalness={0.68}
         />
       </mesh>
-      <mesh position={[0, scale * 0.42, 0]}>
-        <boxGeometry args={[scale * 1.02, 0.06, scale * 1.02]} />
+
+      {/* Recessed luminous collar strip */}
+      <mesh position={[0, bodyH * 0.5 + 0.024, 0]}>
+        <boxGeometry args={[scale * 1.02, 0.048, scale * 1.02]} />
         <meshStandardMaterial
           color={color}
           emissive={color}
-          emissiveIntensity={1.9}
+          emissiveIntensity={1.25}
           toneMapped={false}
+          roughness={0.22}
         />
       </mesh>
+
+      {/* Top metallic bevel cap */}
+      <mesh position={[0, bodyH * 0.5 + 0.068, 0]} castShadow>
+        <boxGeometry args={[scale * 0.88, 0.04, scale * 0.88]} />
+        <meshStandardMaterial color="#1A2946" roughness={0.28} metalness={0.72} />
+      </mesh>
+
       <CanvasLabel
         text={item.value}
-        position={[0, scale * 0.72, 0]}
+        position={[0, scale * 0.74, 0]}
         scale={0.34}
         fontSize={36}
         color="#F8FAFC"
-        background="rgba(6, 10, 20, 0.86)"
+        background="rgba(11, 16, 28, 0.88)"
         borderColor={color}
       />
     </group>
@@ -85,16 +104,21 @@ function BufferChamber({
   const ratio = buffer.capacity > 0 ? buffer.items.length / buffer.capacity : 0;
   const pressureColor =
     buffer.overflowed || ratio >= 1
-      ? '#FF2A5F'
+      ? '#FB7185'
       : ratio >= 0.65
-        ? '#FFB800'
-        : '#00F0FF';
+        ? '#FBBF24'
+        : '#38BDF8';
 
-  const ringColor = isSelected ? '#00FF9D' : isIntakeTarget || hovered ? '#00F0FF' : pressureColor;
+  const ringColor = isSelected ? '#34D399' : isIntakeTarget || hovered ? '#38BDF8' : pressureColor;
+
+  const capacitySlots = useMemo(
+    () => Array.from({ length: Math.max(0, buffer.capacity) }, (_, idx) => idx),
+    [buffer.capacity],
+  );
 
   useFrame((clockState) => {
     if (ruptureRef.current && buffer.overflowed) {
-      const s = 1 + Math.sin(clockState.clock.elapsedTime * 14) * 0.12;
+      const s = 1 + Math.sin(clockState.clock.elapsedTime * 12) * 0.1;
       ruptureRef.current.scale.set(s, s, 1);
     }
   });
@@ -124,67 +148,104 @@ function BufferChamber({
 
     return (
       <group position={position}>
-        {/* Generous clickable pedestal & translucent vertical LIFO cylinder */}
+        {/* Tiered metallic pedestal base */}
         <mesh
-          position={[0, 0.12, 0]}
+          position={[0, 0.1, 0]}
+          receiveShadow
           onPointerOver={handleOver}
           onPointerOut={handleOut}
           onClick={handleClick}
         >
-          <cylinderGeometry args={[1.18, 1.28, 0.24, 24]} />
-          <meshStandardMaterial color="#0D162B" roughness={0.45} metalness={0.65} />
+          <cylinderGeometry args={[1.18, 1.32, 0.2, 24]} />
+          <meshStandardMaterial color="#131E34" roughness={0.4} metalness={0.7} />
+        </mesh>
+        <mesh position={[0, 0.23, 0]}>
+          <cylinderGeometry args={[1.02, 1.12, 0.08, 24]} />
+          <meshStandardMaterial color="#1B2A47" roughness={0.35} metalness={0.72} />
         </mesh>
 
-        {/* Pressure ring */}
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.26, 0]}>
-          <ringGeometry args={[1.15, 1.32, 32]} />
+        {/* Pressure status ring */}
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.215, 0]}>
+          <ringGeometry args={[1.15, 1.29, 32]} />
           <meshStandardMaterial
             color={ringColor}
             emissive={ringColor}
-            emissiveIntensity={isSelected || hovered ? 2.2 : 1.5}
+            emissiveIntensity={isSelected || hovered ? 1.45 : 1.1}
             toneMapped={false}
             side={THREE.DoubleSide}
           />
         </mesh>
 
-        {/* Translucent glass cylinder */}
+        {/* Refined frosted glass containment cylinder */}
         <mesh
           position={[0, 0.24 + cylHeight / 2, 0]}
           onPointerOver={handleOver}
           onPointerOut={handleOut}
           onClick={handleClick}
         >
-          <cylinderGeometry args={[0.92, 0.92, cylHeight, 24, 1, true]} />
+          <cylinderGeometry args={[0.92, 0.92, cylHeight, 28, 1, true]} />
           <meshStandardMaterial
             color={pressureColor}
             emissive={pressureColor}
-            emissiveIntensity={buffer.overflowed ? 1.4 : 0.45}
+            emissiveIntensity={buffer.overflowed ? 0.85 : 0.28}
+            roughness={0.14}
+            metalness={0.18}
             transparent
-            opacity={buffer.overflowed ? 0.34 : 0.16}
+            opacity={buffer.overflowed ? 0.26 : 0.13}
             side={THREE.DoubleSide}
             depthWrite={false}
           />
         </mesh>
 
-        {/* Top pressure rim */}
+        {/* Lower & mid metallic collar rings */}
+        <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0.32, 0]}>
+          <torusGeometry args={[0.935, 0.032, 10, 32]} />
+          <meshStandardMaterial color="#253654" roughness={0.32} metalness={0.78} />
+        </mesh>
+        <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0.24 + cylHeight * 0.5, 0]}>
+          <torusGeometry args={[0.94, 0.022, 10, 32]} />
+          <meshStandardMaterial color="#253654" roughness={0.32} metalness={0.78} />
+        </mesh>
+
+        {/* Fill / capacity tick marks along the glass cylinder */}
+        {capacitySlots.map((slotIdx) => {
+          const filled = slotIdx < buffer.items.length;
+          const tickY = 0.62 + slotIdx * 0.72;
+          return (
+            <mesh key={slotIdx} rotation={[Math.PI / 2, 0, 0]} position={[0, tickY, 0]}>
+              <torusGeometry args={[0.935, filled ? 0.018 : 0.012, 8, 32]} />
+              <meshStandardMaterial
+                color={filled ? pressureColor : '#334155'}
+                emissive={filled ? pressureColor : '#1E293B'}
+                emissiveIntensity={filled ? 1.15 : 0.2}
+                toneMapped={false}
+                transparent
+                opacity={filled ? 0.9 : 0.55}
+              />
+            </mesh>
+          );
+        })}
+
+        {/* Top metallic + luminous pressure rim */}
         <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0.24 + cylHeight, 0]}>
-          <torusGeometry args={[0.92, 0.045, 10, 32]} />
+          <torusGeometry args={[0.93, 0.045, 12, 32]} />
           <meshStandardMaterial
             color={pressureColor}
             emissive={pressureColor}
-            emissiveIntensity={2.0}
+            emissiveIntensity={1.35}
             toneMapped={false}
+            roughness={0.25}
           />
         </mesh>
 
         {/* Overflow rupture flash ring */}
         {buffer.overflowed && (
           <mesh ref={ruptureRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.24 + cylHeight, 0]}>
-            <ringGeometry args={[1.05, 1.45, 24]} />
+            <ringGeometry args={[1.05, 1.38, 28]} />
             <meshStandardMaterial
-              color="#FF2A5F"
-              emissive="#FF2A5F"
-              emissiveIntensity={2.5}
+              color="#FB7185"
+              emissive="#FB7185"
+              emissiveIntensity={1.55}
               toneMapped={false}
               side={THREE.DoubleSide}
             />
@@ -207,7 +268,7 @@ function BufferChamber({
           position={[0, 0.24 + cylHeight + 0.62, 0]}
           scale={0.38}
           fontSize={34}
-          color={buffer.overflowed ? '#FF6B8E' : '#E2E8F0'}
+          color={buffer.overflowed ? '#FDA4AF' : '#E2E8F0'}
           borderColor={ringColor}
         />
 
@@ -229,21 +290,25 @@ function BufferChamber({
             }}
           >
             <mesh>
-              <boxGeometry args={[1.15, 0.14, 0.56]} />
+              <boxGeometry args={[1.18, 0.12, 0.58]} />
+              <meshStandardMaterial color="#132238" roughness={0.36} metalness={0.7} />
+            </mesh>
+            <mesh position={[0, 0.07, 0]}>
+              <boxGeometry args={[1.1, 0.03, 0.5]} />
               <meshStandardMaterial
-                color="#0A2538"
-                emissive="#00F0FF"
-                emissiveIntensity={1.3}
+                color="#38BDF8"
+                emissive="#38BDF8"
+                emissiveIntensity={1.1}
                 toneMapped={false}
               />
             </mesh>
             <CanvasLabel
               text="+ PUSH"
-              position={[0, 0.34, 0]}
+              position={[0, 0.36, 0]}
               scale={0.28}
               fontSize={30}
-              color="#00F0FF"
-              borderColor="#00F0FF"
+              color="#38BDF8"
+              borderColor="#38BDF8"
             />
           </group>
         )}
@@ -256,33 +321,65 @@ function BufferChamber({
 
   return (
     <group position={position}>
-      {/* Conveyor base */}
+      {/* Layered metallic conveyor base */}
       <mesh
-        position={[0, 0.14, 0]}
+        position={[0, 0.12, 0]}
+        receiveShadow
         onPointerOver={handleOver}
         onPointerOut={handleOut}
         onClick={handleClick}
       >
-        <boxGeometry args={[channelLen, 0.24, 1.38]} />
-        <meshStandardMaterial color="#0D162B" roughness={0.45} metalness={0.65} />
+        <boxGeometry args={[channelLen, 0.2, 1.42]} />
+        <meshStandardMaterial color="#131E34" roughness={0.42} metalness={0.68} />
+      </mesh>
+      <mesh position={[0, 0.23, 0]}>
+        <boxGeometry args={[channelLen - 0.16, 0.03, 1.18]} />
+        <meshStandardMaterial color="#0D1526" roughness={0.6} metalness={0.45} />
       </mesh>
 
-      {/* Side neon rails */}
-      <mesh position={[0, 0.3, 0.68]}>
-        <boxGeometry args={[channelLen, 0.08, 0.06]} />
+      {/* Capacity slot tick marks on the conveyor bed */}
+      {capacitySlots.map((slotIdx) => {
+        const filled = slotIdx < buffer.items.length;
+        const xOff = channelLen / 2 - 0.55 - slotIdx * 0.86;
+        return (
+          <mesh key={slotIdx} position={[xOff, 0.25, 0]}>
+            <boxGeometry args={[0.68, 0.015, 0.96]} />
+            <meshStandardMaterial
+              color={filled ? pressureColor : '#1E293B'}
+              emissive={filled ? pressureColor : '#1E293B'}
+              emissiveIntensity={filled ? 0.55 : 0.12}
+              transparent
+              opacity={filled ? 0.35 : 0.45}
+            />
+          </mesh>
+        );
+      })}
+
+      {/* Metallic side guard rails + luminous strips */}
+      <mesh position={[0, 0.26, 0.69]}>
+        <boxGeometry args={[channelLen, 0.1, 0.09]} />
+        <meshStandardMaterial color="#1E2D49" roughness={0.35} metalness={0.75} />
+      </mesh>
+      <mesh position={[0, 0.32, 0.69]}>
+        <boxGeometry args={[channelLen - 0.06, 0.035, 0.045]} />
         <meshStandardMaterial
           color={ringColor}
           emissive={ringColor}
-          emissiveIntensity={1.8}
+          emissiveIntensity={1.25}
           toneMapped={false}
         />
       </mesh>
-      <mesh position={[0, 0.3, -0.68]}>
-        <boxGeometry args={[channelLen, 0.08, 0.06]} />
+
+      <mesh position={[0, 0.26, -0.69]}>
+        <boxGeometry args={[channelLen, 0.1, 0.09]} />
+        <meshStandardMaterial color="#1E2D49" roughness={0.35} metalness={0.75} />
+      </mesh>
+      <mesh position={[0, 0.32, -0.69]}>
+        <boxGeometry args={[channelLen - 0.06, 0.035, 0.045]} />
         <meshStandardMaterial
           color={ringColor}
           emissive={ringColor}
-          emissiveIntensity={1.8}
+          emissiveIntensity={1.25}
           toneMapped={false}
         />
       </mesh>
@@ -328,21 +425,25 @@ function BufferChamber({
           }}
         >
           <mesh>
-            <boxGeometry args={[1.25, 0.14, 0.52]} />
+            <boxGeometry args={[1.28, 0.12, 0.54]} />
+            <meshStandardMaterial color="#1D1B38" roughness={0.36} metalness={0.7} />
+          </mesh>
+          <mesh position={[0, 0.07, 0]}>
+            <boxGeometry args={[1.2, 0.03, 0.46]} />
             <meshStandardMaterial
-              color="#0A2538"
-              emissive="#A855F7"
-              emissiveIntensity={1.3}
+              color="#A78BFA"
+              emissive="#A78BFA"
+              emissiveIntensity={1.1}
               toneMapped={false}
             />
           </mesh>
           <CanvasLabel
             text="+ ENQ"
-            position={[0, 0.34, 0]}
+            position={[0, 0.36, 0]}
             scale={0.28}
             fontSize={30}
-            color="#E9D5FF"
-            borderColor="#A855F7"
+            color="#DDD6FE"
+            borderColor="#A78BFA"
           />
         </group>
       )}
@@ -461,26 +562,40 @@ export function StacksQueuesScene3D({
           document.body.style.cursor = 'auto';
         }}
       >
+        {/* Deck chassis + recessed lane track */}
         <mesh position={[0, 0.1, 0]} receiveShadow>
-          <boxGeometry args={[2.1, 0.18, 6.4]} />
-          <meshStandardMaterial color="#0A1326" roughness={0.5} metalness={0.6} />
+          <boxGeometry args={[2.16, 0.18, 6.46]} />
+          <meshStandardMaterial color="#121C30" roughness={0.46} metalness={0.65} />
         </mesh>
+        <mesh position={[0, 0.195, 0]}>
+          <boxGeometry args={[1.68, 0.02, 6.1]} />
+          <meshStandardMaterial color="#0C1322" roughness={0.62} metalness={0.4} />
+        </mesh>
+
+        {/* Outer metallic guard rail */}
+        <mesh position={[-1.04, 0.22, 0]}>
+          <boxGeometry args={[0.09, 0.09, 6.46]} />
+          <meshStandardMaterial color="#1E2D49" roughness={0.35} metalness={0.75} />
+        </mesh>
+
+        {/* Inner luminous intake rail */}
         <mesh position={[1.04, 0.22, 0]}>
-          <boxGeometry args={[0.07, 0.06, 6.4]} />
+          <boxGeometry args={[0.08, 0.07, 6.46]} />
           <meshStandardMaterial
-            color="#00F0FF"
-            emissive="#00F0FF"
-            emissiveIntensity={selection?.kind === 'input' || inputHovered ? 2.4 : 1.3}
+            color="#38BDF8"
+            emissive="#38BDF8"
+            emissiveIntensity={selection?.kind === 'input' || inputHovered ? 1.5 : 1.05}
             toneMapped={false}
           />
         </mesh>
+
         <CanvasLabel
           text={`INPUT (${state.inputStream.length})`}
           position={[0, 1.55, -2.9]}
           scale={0.4}
           fontSize={36}
-          color="#00F0FF"
-          borderColor={selection?.kind === 'input' ? '#00FF9D' : '#00F0FF'}
+          color="#38BDF8"
+          borderColor={selection?.kind === 'input' ? '#34D399' : '#38BDF8'}
         />
 
         {visibleInput.map((item, idx) => (
@@ -529,26 +644,40 @@ export function StacksQueuesScene3D({
           document.body.style.cursor = 'auto';
         }}
       >
+        {/* Deck chassis + recessed lane track */}
         <mesh position={[0, 0.1, 0]} receiveShadow>
-          <boxGeometry args={[2.2, 0.18, 6.4]} />
-          <meshStandardMaterial color="#0A1326" roughness={0.5} metalness={0.6} />
+          <boxGeometry args={[2.24, 0.18, 6.46]} />
+          <meshStandardMaterial color="#121C30" roughness={0.46} metalness={0.65} />
         </mesh>
+        <mesh position={[0, 0.195, 0]}>
+          <boxGeometry args={[1.76, 0.02, 6.1]} />
+          <meshStandardMaterial color="#0C1322" roughness={0.62} metalness={0.4} />
+        </mesh>
+
+        {/* Outer metallic guard rail */}
+        <mesh position={[1.08, 0.22, 0]}>
+          <boxGeometry args={[0.09, 0.09, 6.46]} />
+          <meshStandardMaterial color="#1E2D49" roughness={0.35} metalness={0.75} />
+        </mesh>
+
+        {/* Inner luminous output rail */}
         <mesh position={[-1.08, 0.22, 0]}>
-          <boxGeometry args={[0.07, 0.06, 6.4]} />
+          <boxGeometry args={[0.08, 0.07, 6.46]} />
           <meshStandardMaterial
-            color="#00FF9D"
-            emissive="#00FF9D"
-            emissiveIntensity={outputHovered || selection?.kind === 'buffer' ? 2.3 : 1.3}
+            color="#34D399"
+            emissive="#34D399"
+            emissiveIntensity={outputHovered || selection?.kind === 'buffer' ? 1.5 : 1.05}
             toneMapped={false}
           />
         </mesh>
+
         <CanvasLabel
           text={`OUTPUT (${state.outputEmitted.length}/${state.targetManifest.length})`}
           position={[0, 1.55, -2.9]}
           scale={0.4}
           fontSize={36}
-          color="#00FF9D"
-          borderColor="#00FF9D"
+          color="#34D399"
+          borderColor="#34D399"
         />
 
         {state.targetManifest.slice(0, 6).map((expectedVal, idx) => {
@@ -563,7 +692,7 @@ export function StacksQueuesScene3D({
                 item={emitted}
                 position={[0, 0.54, zSlot]}
                 scale={0.64}
-                overrideColor={matched ? '#00FF9D' : '#FF2A5F'}
+                overrideColor={matched ? '#34D399' : '#FB7185'}
               />
             );
           }
@@ -573,12 +702,12 @@ export function StacksQueuesScene3D({
               <mesh>
                 <boxGeometry args={[0.62, 0.5, 0.62]} />
                 <meshStandardMaterial
-                  color="#00FF9D"
-                  emissive="#00FF9D"
-                  emissiveIntensity={0.6}
+                  color="#34D399"
+                  emissive="#34D399"
+                  emissiveIntensity={0.48}
                   wireframe
                   transparent
-                  opacity={0.45}
+                  opacity={0.42}
                 />
               </mesh>
               <CanvasLabel
@@ -587,8 +716,8 @@ export function StacksQueuesScene3D({
                 scale={0.3}
                 fontSize={32}
                 color="#6EE7B7"
-                background="rgba(4, 24, 18, 0.72)"
-                borderColor="rgba(0, 255, 157, 0.45)"
+                background="rgba(11, 24, 24, 0.78)"
+                borderColor="rgba(52, 211, 153, 0.45)"
               />
             </group>
           );

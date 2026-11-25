@@ -48,6 +48,11 @@ if (prev) {
   api.link('n2', 'n3');
 }
 `,
+    hints: [
+      'Never overwrite n2.next until n4 is safely anchored from another node.',
+      'Connect the standby node n3 to the downstream tail (n4) first.',
+      'Call api.link("n3", "n4") first, then api.link("n2", "n3").',
+    ],
     insight:
       'In a singly linked list, pointer assignment order is sacred: always tether the new node to the downstream chain before redirecting the predecessor.',
     bigOIntuition:
@@ -96,6 +101,11 @@ if (corrupted) {
   api.link('n1', corrupted.nextId);
 }
 `,
+    hints: [
+      'Deleting a node from a singly linked list only requires rewiring its predecessor.',
+      'Read n2.nextId (which points to n3) so the downstream chain stays connected.',
+      'Execute a single rewire: api.link("n1", "n3") to bypass corrupted n2 cleanly.',
+    ],
     insight:
       'Deleting a node requires only updating its predecessor to skip over it—one O(1) pointer update keeps the entire remaining chain intact.',
     bigOIntuition:
@@ -165,6 +175,11 @@ while (curr !== null) {
 }
 api.setHead(prev);
 `,
+    hints: [
+      'Save curr.next in a local variable before flipping curr.next backward to prev.',
+      'Step through n1 -> null, n2 -> n1, n3 -> n2, n4 -> n3 while advancing prev and curr.',
+      'Once curr becomes null, call api.setHead(prev) so HEAD points to n4.',
+    ],
     insight:
       'Saving `next` before flipping `curr.next = prev` lets you invert an entire linked list in a single O(n) sweep with O(1) extra pointers.',
     bigOIntuition:
@@ -252,9 +267,178 @@ if (met) {
   }
 }
 `,
+    hints: [
+      'Step slow (1x) and fast (2x) via api.stepProbe() until they collide inside the loop.',
+      'Walk one pointer from HEAD and another from meetingNodeId at 1x speed to find the loop entry (n2).',
+      'Follow the cycle to the tail node whose nextId points back to n2 (n5), then call api.link("n5", null).',
+    ],
     insight:
       "Floyd's Tortoise (1x) and Hare (2x) are mathematically guaranteed to collide inside any cycle in O(n) steps using O(1) memory—no visited hash set required.",
     bigOIntuition:
       'A hash set of visited nodes detects cycles in O(n) space. Moving two probes at speeds 1 and 2 closes the gap by 1 node per step in O(1) space.',
+  },
+  {
+    id: 'linked-lists-5',
+    code: '2.5',
+    worldId: 'linked-lists',
+    order: 5,
+    title: 'Pairwise Phase-Flip',
+    concept: 'Swap Adjacent Nodes in Pairs',
+    brief: 'Swap every adjacent pair of nodes in-place by rewiring tethers so [10, 20, 30, 40] becomes [20, 10, 40, 30].',
+    goalSummary: 'Swap adjacent pairs & set HEAD = n2 -> [20, 10, 40, 30]',
+    objectiveKind: 'sequence-match',
+    strictNoLeaks: false,
+    initialState: {
+      world: 'linked-lists',
+      headId: 'n1',
+      cursors: { first: 'n1', second: 'n2' },
+      targetSequence: [20, 10, 40, 30],
+      nodes: {
+        n1: { id: 'n1', value: 10, nextId: 'n2', pos: [-5.25, 0, 0] },
+        n2: { id: 'n2', value: 20, nextId: 'n3', pos: [-1.75, 0, 0] },
+        n3: { id: 'n3', value: 30, nextId: 'n4', pos: [1.75, 0, 0] },
+        n4: { id: 'n4', value: 40, nextId: null, pos: [5.25, 0, 0] },
+      },
+    },
+    par: {
+      sRankCycles: 8,
+      threeStarCycles: 12,
+      twoStarCycles: 18,
+      maxAuxMemory: 0,
+      targetBigO: 'O(n) rewires / O(1) space',
+    },
+    pseudocode: [
+      'prev = null; curr = head',
+      'while curr and curr.next:',
+      '  first = curr; second = curr.next; nextPair = second.next',
+      '  first.next = nextPair; second.next = first',
+      '  if prev: prev.next = second else head = second',
+      '  prev = first; curr = nextPair',
+    ],
+    starterCode: `// Swap adjacent node pairs (n1 <-> n2) and (n3 <-> n4) in-place!
+let prev = null;
+let curr = api.head();
+
+while (curr) {
+  const firstNode = api.getNode(curr);
+  const second = firstNode ? firstNode.nextId : null;
+  if (!second) break;
+  const secondNode = api.getNode(second);
+  const nextPair = secondNode ? secondNode.nextId : null;
+  // TODO: flip (curr, second), connect prev (or setHead), and advance
+  break;
+}
+`,
+    referenceSolution: `let prev = null;
+let curr = api.head();
+
+while (curr) {
+  const firstNode = api.getNode(curr);
+  const second = firstNode ? firstNode.nextId : null;
+  if (!second) break;
+  const secondNode = api.getNode(second);
+  const nextPair = secondNode ? secondNode.nextId : null;
+
+  api.link(curr, nextPair);
+  api.link(second, curr);
+  if (prev) {
+    api.link(prev, second);
+  } else {
+    api.setHead(second);
+  }
+  prev = curr;
+  curr = nextPair;
+}
+`,
+    hints: [
+      'Process two nodes at a time (first, second) and save nextPair = second.next before rewiring.',
+      'Rewire first -> nextPair and second -> first; update HEAD to n2 on the first pair.',
+      'Remember to connect the tail of pair 1 (n1) to the new head of pair 2 (n4) via api.link("n1", "n4").',
+    ],
+    insight:
+      'Pairwise node swapping mutates links rather than copying values—requiring 3 pointer updates per pair (first, second, and the previous pair tail) in O(n) time and O(1) space.',
+    bigOIntuition:
+      'Each node is touched once while advancing two hops at a time, yielding O(n) time with constant pointer overhead.',
+  },
+  {
+    id: 'linked-lists-6',
+    code: '2.6',
+    worldId: 'linked-lists',
+    order: 6,
+    title: 'Dual-Chain Fusion',
+    concept: 'Merge Two Sorted Lists — O(n + m)',
+    brief: 'Splice two parallel sorted chains [10, 30, 50] and [20, 40, 60] into one fused sequence with zero memory leaks.',
+    goalSummary: 'Merge parallel chains -> [10, 20, 30, 40, 50, 60] (0 leaks)',
+    objectiveKind: 'sequence-match',
+    strictNoLeaks: true,
+    initialState: {
+      world: 'linked-lists',
+      headId: 'a1',
+      cursors: { chainA: 'a1', chainB: 'b1' },
+      targetSequence: [10, 20, 30, 40, 50, 60],
+      nodes: {
+        a1: { id: 'a1', value: 10, nextId: 'a2', pos: [-4.5, 0, 1.4] },
+        a2: { id: 'a2', value: 30, nextId: 'a3', pos: [0, 0, 1.4] },
+        a3: { id: 'a3', value: 50, nextId: null, pos: [4.5, 0, 1.4] },
+        b1: { id: 'b1', value: 20, nextId: 'b2', pos: [-2.25, 0, -1.8] },
+        b2: { id: 'b2', value: 40, nextId: 'b3', pos: [2.25, 0, -1.8] },
+        b3: { id: 'b3', value: 60, nextId: null, pos: [6.5, 0, -1.8] },
+      },
+    },
+    par: {
+      sRankCycles: 8,
+      threeStarCycles: 12,
+      twoStarCycles: 18,
+      maxAuxMemory: 0,
+      targetBigO: 'O(n + m) / 0 leaks',
+    },
+    pseudocode: [
+      'currA = head (a1); currB = b1',
+      'while currA and currB:',
+      '  nextA = currA.next; nextB = currB.next',
+      '  if nextA != null: currB.next = nextA  // anchor downstream first!',
+      '  currA.next = currB',
+      '  currA = nextA; currB = nextB',
+    ],
+    starterCode: `// Fuse sorted Chain A (a1->a2->a3) and standby Chain B (b1->b2->b3) with ZERO memory leaks!
+// Remember: anchor b_i -> nextA BEFORE rewiring a_i -> b_i!
+let currA = api.head();
+let currB = 'b1';
+
+while (currA && currB) {
+  const nodeA = api.getNode(currA);
+  const nodeB = api.getNode(currB);
+  // TODO: save nextA & nextB, anchor currB -> nextA (if nextA), then link currA -> currB
+  break;
+}
+`,
+    referenceSolution: `let currA = api.head();
+let currB = 'b1';
+
+while (currA && currB) {
+  const nodeA = api.getNode(currA);
+  const nodeB = api.getNode(currB);
+  if (!nodeA || !nodeB) break;
+  const nextA = nodeA.nextId;
+  const nextB = nodeB.nextId;
+
+  if (nextA) {
+    api.link(currB, nextA);
+  }
+  api.link(currA, currB);
+
+  currA = nextA;
+  currB = nextB;
+}
+`,
+    hints: [
+      'Zero-leak splicing applies to every insertion: anchor the incoming B-node to nextA before breaking currA.next.',
+      'Save both nextA and nextB before modifying either link so you never lose track of the remaining tails.',
+      'Wire b1 -> a2 then a1 -> b1; b2 -> a3 then a2 -> b2; finally a3 -> b3.',
+    ],
+    insight:
+      'Merging two sorted linked lists requires zero extra node allocation—weaving existing pointers in-place runs in O(n + m) time and O(1) space, forming the backbone of Linked List Merge Sort.',
+    bigOIntuition:
+      'Unlike merging arrays (which requires an O(n + m) scratch buffer), linked list merge splices pointers directly in O(1) auxiliary space.',
   },
 ];

@@ -110,6 +110,7 @@ export function createPathfindingSession(
   const clearSearchOverlays = (): void => {
     for (const cell of state.cells) {
       cell.visited = false;
+      cell.visitedBy = undefined;
       cell.inFrontier = false;
       cell.inPath = false;
       cell.distance = undefined;
@@ -118,6 +119,241 @@ export function createPathfindingSession(
     state.visitedCount = 0;
     state.peakFrontier = 0;
     state.pathFound = false;
+  };
+
+  const runBidirectionalSearch = (
+    sx: number,
+    sy: number,
+    gx: number,
+    gy: number,
+    startKey: string,
+    goalKey: string,
+    startCell: GridCell,
+    goalCell: GridCell,
+    pitchFor: (x: number, y: number) => number
+  ): SearchSummary => {
+    let visitedCount = 0;
+    let peakFrontier = 0;
+
+    if (startKey === goalKey) {
+      startCell.visited = true;
+      startCell.visitedBy = 'start';
+      startCell.inPath = true;
+      startCell.distance = 0;
+      visitedCount = 1;
+      peakFrontier = 1;
+      state.pathFound = true;
+      state.pathCost = 0;
+      state.visitedCount = 1;
+      state.peakFrontier = 1;
+      metrics.cycles = 1;
+      metrics.auxMemory = 1;
+      pushEvent('VISIT', `Visit (${sx}, ${sy}) [d=0]`, 1, [startKey], { cycles: 1, auxMemory: 1 }, 1);
+      pushEvent('PATH_FOUND', `BIDIRECTIONAL path found: cost 0, visited 1, peak frontier 1`, 4, [startKey], { auxMemory: 1 }, 1);
+      return { pathFound: true, pathCost: 0, visitedCount: 1, peakFrontier: 1 };
+    }
+
+    interface BiEntry {
+      x: number;
+      y: number;
+      key: string;
+      d: number;
+    }
+
+    const openStart: BiEntry[] = [{ x: sx, y: sy, key: startKey, d: 0 }];
+    const openGoal: BiEntry[] = [{ x: gx, y: gy, key: goalKey, d: 0 }];
+    const parentStart = new Map<string, string>();
+    const parentGoal = new Map<string, string>();
+    const seenStart = new Set<string>([startKey]);
+    const seenGoal = new Set<string>([goalKey]);
+    const inFrontierStart = new Set<string>([startKey]);
+    const inFrontierGoal = new Set<string>([goalKey]);
+
+    startCell.inFrontier = true;
+    startCell.visitedBy = 'start';
+    startCell.distance = 0;
+    goalCell.inFrontier = true;
+    goalCell.visitedBy = 'goal';
+    goalCell.distance = 0;
+
+    peakFrontier = 2;
+    state.peakFrontier = peakFrontier;
+    metrics.auxMemory = peakFrontier;
+
+    pushEvent(
+      'FRONTIER',
+      `Seed BIDIRECTIONAL waves at (${sx}, ${sy}) & (${gx}, ${gy})`,
+      0,
+      [startKey, goalKey],
+      { auxMemory: peakFrontier },
+      0.5
+    );
+
+    let meetStartKey: string | null = null;
+    let meetGoalKey: string | null = null;
+    let turn: 'start' | 'goal' = 'start';
+
+    while (openStart.length > 0 && openGoal.length > 0) {
+      const side = turn;
+      turn = turn === 'start' ? 'goal' : 'start';
+
+      const queue = side === 'start' ? openStart : openGoal;
+      const inFrontierOwn = side === 'start' ? inFrontierStart : inFrontierGoal;
+      const seenOwn = side === 'start' ? seenStart : seenGoal;
+      const seenOther = side === 'start' ? seenGoal : seenStart;
+      const parentOwn = side === 'start' ? parentStart : parentGoal;
+
+      const current = queue.shift()!;
+      inFrontierOwn.delete(current.key);
+
+      const currCell = getCell(current.x, current.y)!;
+      currCell.inFrontier = false;
+      currCell.visited = true;
+      currCell.visitedBy = side;
+
+      visitedCount += 1;
+      state.visitedCount = visitedCount;
+      state.peakFrontier = peakFrontier;
+      metrics.cycles = visitedCount;
+      metrics.auxMemory = peakFrontier;
+
+      pushEvent(
+        'VISIT',
+        `Visit (${current.x}, ${current.y}) [${side} wave, d=${current.d}]`,
+        1,
+        [current.key],
+        { cycles: 1, auxMemory: peakFrontier },
+        pitchFor(current.x, current.y)
+      );
+
+      for (const [dx, dy] of DIRECTIONS) {
+        const nx = current.x + dx;
+        const ny = current.y + dy;
+        const neighbor = getCell(nx, ny);
+        if (!neighbor || neighbor.type === 'wall') continue;
+
+        const nKey = cellKey(nx, ny);
+        if (seenOther.has(nKey)) {
+          if (side === 'start') {
+            meetStartKey = current.key;
+            meetGoalKey = nKey;
+          } else {
+            meetStartKey = nKey;
+            meetGoalKey = current.key;
+          }
+          break;
+        }
+
+        if (seenOwn.has(nKey)) continue;
+
+        seenOwn.add(nKey);
+        parentOwn.set(nKey, current.key);
+        inFrontierOwn.add(nKey);
+        neighbor.distance = current.d + 1;
+        neighbor.inFrontier = true;
+        neighbor.visitedBy = side;
+
+        queue.push({ x: nx, y: ny, key: nKey, d: current.d + 1 });
+
+        const frontierSize = inFrontierStart.size + inFrontierGoal.size;
+        if (frontierSize > peakFrontier) {
+          peakFrontier = frontierSize;
+          state.peakFrontier = peakFrontier;
+          metrics.auxMemory = peakFrontier;
+        }
+
+        pushEvent(
+          'FRONTIER',
+          `Discover (${nx}, ${ny}) [${side} wave, hops=${current.d + 1}]`,
+          2,
+          [nKey],
+          { auxMemory: peakFrontier },
+          pitchFor(nx, ny)
+        );
+      }
+
+      if (meetStartKey && meetGoalKey) {
+        break;
+      }
+    }
+
+    if (meetStartKey && meetGoalKey) {
+      const leftHalf: string[] = [];
+      let trace: string | undefined = meetStartKey;
+      while (trace) {
+        leftHalf.push(trace);
+        if (trace === startKey) break;
+        trace = parentStart.get(trace);
+      }
+      leftHalf.reverse();
+
+      const rightHalf: string[] = [];
+      trace = meetGoalKey;
+      while (trace) {
+        rightHalf.push(trace);
+        if (trace === goalKey) break;
+        trace = parentGoal.get(trace);
+      }
+
+      const pathKeys = [...leftHalf, ...rightHalf];
+      let totalCost = 0;
+      for (let i = 0; i < pathKeys.length; i++) {
+        const [px, py] = pathKeys[i].split(',').map(Number);
+        const pCell = getCell(px, py);
+        if (pCell) {
+          pCell.inPath = true;
+          if (i > 0) {
+            totalCost += Math.max(1, pCell.weight);
+          }
+        }
+      }
+
+      state.pathFound = true;
+      state.pathCost = totalCost;
+      state.visitedCount = visitedCount;
+      state.peakFrontier = peakFrontier;
+      metrics.cycles = visitedCount;
+      metrics.auxMemory = peakFrontier;
+
+      pushEvent(
+        'PATH_FOUND',
+        `BIDIRECTIONAL waves met! cost ${totalCost}, visited ${visitedCount}, peak frontier ${peakFrontier}`,
+        4,
+        pathKeys,
+        { auxMemory: peakFrontier },
+        1
+      );
+
+      return {
+        pathFound: true,
+        pathCost: totalCost,
+        visitedCount,
+        peakFrontier,
+      };
+    }
+
+    state.pathFound = false;
+    state.pathCost = 0;
+    state.visitedCount = visitedCount;
+    state.peakFrontier = peakFrontier;
+    metrics.cycles = visitedCount;
+    metrics.auxMemory = peakFrontier;
+
+    pushEvent(
+      'NO_PATH',
+      `BIDIRECTIONAL exhausted frontiers — goal (${gx}, ${gy}) unreachable`,
+      5,
+      [goalKey],
+      { auxMemory: peakFrontier },
+      0
+    );
+
+    return {
+      pathFound: false,
+      pathCost: 0,
+      visitedCount,
+      peakFrontier,
+    };
   };
 
   const runSearchImpl = (): SearchSummary => {
@@ -141,6 +377,20 @@ export function createPathfindingSession(
     if (!startCell || !goalCell) {
       pushEvent('NO_PATH', 'Invalid start or goal coordinates', 5, [], {}, 0);
       return { pathFound: false, pathCost: 0, visitedCount: 0, peakFrontier: 0 };
+    }
+
+    if (state.algorithm === 'bidirectional') {
+      return runBidirectionalSearch(
+        sx,
+        sy,
+        gx,
+        gy,
+        startKey,
+        goalKey,
+        startCell,
+        goalCell,
+        pitchFor
+      );
     }
 
     const cameFrom = new Map<string, string>();
@@ -173,7 +423,10 @@ export function createPathfindingSession(
       y: sy,
       key: startKey,
       g: 0,
-      f: state.algorithm === 'astar' ? startH : 0,
+      f:
+        state.algorithm === 'astar' || state.algorithm === 'greedy'
+          ? startH
+          : 0,
       h: startH,
       order: pushOrder++,
     });
@@ -191,6 +444,9 @@ export function createPathfindingSession(
       if (open.length === 0) return undefined;
       if (state.algorithm === 'bfs') {
         return open.shift();
+      }
+      if (state.algorithm === 'dfs') {
+        return open.pop();
       }
       let bestIdx = 0;
       for (let i = 1; i < open.length; i++) {
@@ -253,10 +509,12 @@ export function createPathfindingSession(
         if (closed.has(nKey)) continue;
 
         const stepWeight =
-          state.algorithm === 'bfs' ? 1 : Math.max(1, neighbor.weight);
+          state.algorithm === 'bfs' || state.algorithm === 'dfs'
+            ? 1
+            : Math.max(1, neighbor.weight);
         const tentativeG = current.g + stepWeight;
 
-        if (state.algorithm === 'bfs') {
+        if (state.algorithm === 'bfs' || state.algorithm === 'dfs') {
           if (inOpen.has(nKey)) continue;
           cameFrom.set(nKey, current.key);
           gScore.set(nKey, tentativeG);
@@ -280,6 +538,36 @@ export function createPathfindingSession(
           pushEvent(
             'FRONTIER',
             `Discover (${nx}, ${ny}) [hops=${tentativeG}]`,
+            2,
+            [nKey],
+            { auxMemory: peakFrontier },
+            pitchFor(nx, ny)
+          );
+        } else if (state.algorithm === 'greedy') {
+          if (inOpen.has(nKey)) continue;
+          const h = manhattan(nx, ny, gx, gy);
+          cameFrom.set(nKey, current.key);
+          gScore.set(nKey, tentativeG);
+          neighbor.distance = tentativeG;
+          neighbor.inFrontier = true;
+          inOpen.add(nKey);
+          open.push({
+            x: nx,
+            y: ny,
+            key: nKey,
+            g: tentativeG,
+            f: h,
+            h,
+            order: pushOrder++,
+          });
+          if (inOpen.size > peakFrontier) {
+            peakFrontier = inOpen.size;
+            state.peakFrontier = peakFrontier;
+            metrics.auxMemory = peakFrontier;
+          }
+          pushEvent(
+            'FRONTIER',
+            `Greedy frontier (${nx}, ${ny}) [h=${h}, g=${tentativeG}]`,
             2,
             [nKey],
             { auxMemory: peakFrontier },
@@ -450,7 +738,14 @@ export function createPathfindingSession(
     },
 
     compareAllAlgorithms(): AlgorithmComparisonRow[] {
-      const algorithms: PathfindingAlgorithm[] = ['bfs', 'dijkstra', 'astar'];
+      const algorithms: PathfindingAlgorithm[] = [
+        'bfs',
+        'dfs',
+        'dijkstra',
+        'greedy',
+        'astar',
+        'bidirectional',
+      ];
       return algorithms.map((algorithm) => {
         const cloned = clonePathfindingState(state);
         cloned.algorithm = algorithm;
@@ -496,19 +791,37 @@ export function evaluatePathfindingLevel(
     );
   }
 
-  const maxCost =
-    typeof level.meta?.maxCost === 'number' ? level.meta.maxCost : undefined;
-  if (maxCost !== undefined && state.pathCost > maxCost) {
+  const requiredAlgorithm =
+    typeof level.meta?.requiredAlgorithm === 'string'
+      ? (level.meta.requiredAlgorithm as PathfindingAlgorithm)
+      : undefined;
+  if (requiredAlgorithm && state.algorithm !== requiredAlgorithm) {
     return evaluateScore(
       false,
       effectiveMetrics,
       level.par,
       level.insight,
-      `Path cost ${state.pathCost} exceeds optimal target (${maxCost}). ${
-        state.algorithm === 'bfs'
-          ? 'BFS ignores tile elevation weights — try Dijkstra or A*!'
-          : 'Try routing around high-elevation weighted tiles.'
-      }`
+      `This mission requires ${requiredAlgorithm.toUpperCase()} (currently using ${state.algorithm.toUpperCase()}).`
+    );
+  }
+
+  const maxCost =
+    typeof level.meta?.maxCost === 'number' ? level.meta.maxCost : undefined;
+  if (maxCost !== undefined && state.pathCost > maxCost) {
+    const costHint =
+      state.algorithm === 'bfs' || state.algorithm === 'bidirectional'
+        ? `${state.algorithm.toUpperCase()} ignores tile elevation weights — try Dijkstra or A*!`
+        : state.algorithm === 'greedy'
+          ? 'Greedy Best-First ignores accumulated path cost g(n) and fell into the trap — switch to A*!'
+          : state.algorithm === 'dfs'
+            ? 'DFS does not guarantee shortest paths — try BFS, Dijkstra, or A*!'
+            : 'Try routing around high-elevation weighted tiles.';
+    return evaluateScore(
+      false,
+      effectiveMetrics,
+      level.par,
+      level.insight,
+      `Path cost ${state.pathCost} exceeds optimal target (${maxCost}). ${costHint}`
     );
   }
 
@@ -522,7 +835,7 @@ export function evaluatePathfindingLevel(
       effectiveMetrics,
       level.par,
       level.insight,
-      `Explored ${state.visitedCount} nodes (max allowed: ${maxVisited}). Switch to A* to guide the frontier toward the goal.`
+      `Explored ${state.visitedCount} nodes (max allowed: ${maxVisited}). Switch to A* or Bidirectional BFS to shrink the explored frontier.`
     );
   }
 

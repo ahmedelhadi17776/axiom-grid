@@ -10,6 +10,8 @@ import type {
   SimEvent,
   SimMetrics,
   StacksQueuesWorldState,
+  TreesWorldState,
+  TreeTraversalOrder,
   WorldId,
 } from '../types';
 import {
@@ -32,11 +34,33 @@ import {
   createStacksQueuesSession,
   evaluateStacksQueuesLevel,
 } from './stacksQueuesEngine';
+import {
+  cloneTreesState,
+  createTreesSession,
+  evaluateTreesLevel,
+} from './treesEngine';
 
 export * from './arraysEngine';
 export * from './linkedListEngine';
 export * from './stacksQueuesEngine';
 export * from './pathfindingEngine';
+export * from './treesEngine';
+
+const VALID_PATHFINDING_ALGORITHMS = new Set<PathfindingAlgorithm>([
+  'bfs',
+  'dfs',
+  'dijkstra',
+  'greedy',
+  'astar',
+  'bidirectional',
+]);
+
+const VALID_TRAVERSAL_ORDERS = new Set<TreeTraversalOrder>([
+  'preorder',
+  'inorder',
+  'postorder',
+  'levelorder',
+]);
 
 export function cloneWorldState<T extends AnyWorldState>(state: T): T {
   switch (state.world) {
@@ -48,6 +72,8 @@ export function cloneWorldState<T extends AnyWorldState>(state: T): T {
       return cloneStacksQueuesState(state) as T;
     case 'pathfinding':
       return clonePathfindingState(state) as T;
+    case 'trees':
+      return cloneTreesState(state) as T;
   }
 }
 
@@ -78,6 +104,12 @@ export function evaluateLevel(
     case 'pathfinding':
       return evaluatePathfindingLevel(
         level as LevelDefinition<PathfindingWorldState>,
+        state,
+        metrics
+      );
+    case 'trees':
+      return evaluateTreesLevel(
+        level as LevelDefinition<TreesWorldState>,
         state,
         metrics
       );
@@ -119,6 +151,10 @@ export function applyDirectAction(
         const i = Number(payload.i);
         const j = Number(payload.j);
         session.compare(i, j);
+        break;
+      }
+      case 'PROBE': {
+        session.probe(Number(payload.index));
         break;
       }
       case 'SET_POINTER': {
@@ -263,7 +299,7 @@ export function applyDirectAction(
     switch (action.type) {
       case 'SET_ALGORITHM': {
         const algo = String(payload.algorithm ?? 'bfs') as PathfindingAlgorithm;
-        if (algo === 'bfs' || algo === 'dijkstra' || algo === 'astar') {
+        if (VALID_PATHFINDING_ALGORITHMS.has(algo)) {
           session.setAlgorithm(algo);
         }
         break;
@@ -336,6 +372,75 @@ export function applyDirectAction(
       state: session.getState(),
       events: session.getEvents(),
       metrics: baseMetrics,
+    };
+  }
+
+  if (state.world === 'trees' && action.world === 'trees') {
+    const session = createTreesSession(state);
+    switch (action.type) {
+      case 'PROBE': {
+        session.probe(String(payload.id ?? ''));
+        break;
+      }
+      case 'INSERT': {
+        session.insert(Number(payload.value));
+        break;
+      }
+      case 'INSERT_AT': {
+        const parentId =
+          payload.parentId === null || payload.parentId === undefined
+            ? null
+            : String(payload.parentId);
+        const side = payload.side === 'right' ? 'right' : 'left';
+        const value =
+          payload.value !== undefined ? Number(payload.value) : undefined;
+        session.insertAt(parentId, side, value);
+        break;
+      }
+      case 'DELETE_NODE': {
+        session.deleteNode(String(payload.id ?? ''));
+        break;
+      }
+      case 'ROTATE_LEFT': {
+        session.rotateLeft(String(payload.id ?? ''));
+        break;
+      }
+      case 'ROTATE_RIGHT': {
+        session.rotateRight(String(payload.id ?? ''));
+        break;
+      }
+      case 'RUN_TRAVERSAL': {
+        const order = String(payload.order ?? 'inorder') as TreeTraversalOrder;
+        if (VALID_TRAVERSAL_ORDERS.has(order)) {
+          session.runTraversal(order);
+        }
+        break;
+      }
+      case 'VISIT_NODE': {
+        session.visitNode(String(payload.id ?? ''));
+        break;
+      }
+      case 'SELECT_NODE': {
+        const id =
+          payload.id === null || payload.id === undefined
+            ? null
+            : String(payload.id);
+        session.selectNode(id);
+        break;
+      }
+      case 'AUTO_BALANCE': {
+        session.autoBalance();
+        break;
+      }
+      default:
+        break;
+    }
+
+    const delta = session.getMetrics();
+    return {
+      state: session.getState(),
+      events: session.getEvents(),
+      metrics: accumulateMetrics(baseMetrics, delta),
     };
   }
 

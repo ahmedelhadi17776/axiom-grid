@@ -12,7 +12,9 @@ import {
   Radar,
   RefreshCw,
   RotateCcw,
+  RotateCw,
   Save,
+  Scale,
   Shuffle,
   SkipBack,
   SkipForward,
@@ -26,9 +28,30 @@ import {
 import { useGameStore, type PathPaintTool } from '../store/useGameStore';
 import { SANDBOX_PRESETS_BUILTIN, WORLD_META } from '../levels/index';
 import { getActiveEvent, getCurrentState } from '../engine/timeline';
-import type { PathfindingAlgorithm, PlaybackSpeed, WorldId } from '../engine/types';
+import type {
+  PathfindingAlgorithm,
+  PlaybackSpeed,
+  TreeTraversalOrder,
+  WorldId,
+} from '../engine/types';
 
 const SPEEDS: PlaybackSpeed[] = [0.5, 1, 2, 4];
+
+const PATHFINDING_ALGOS: Array<{ id: PathfindingAlgorithm; label: string; full: string }> = [
+  { id: 'bfs', label: 'BFS', full: 'BFS' },
+  { id: 'dfs', label: 'DFS', full: 'DFS' },
+  { id: 'dijkstra', label: 'DIJK', full: 'Dijkstra' },
+  { id: 'greedy', label: 'GREEDY', full: 'Greedy' },
+  { id: 'astar', label: 'A*', full: 'A*' },
+  { id: 'bidirectional', label: 'BIDIR', full: 'Bidirectional' },
+];
+
+const TREE_TRAVERSALS: Array<{ id: TreeTraversalOrder; label: string }> = [
+  { id: 'preorder', label: 'PRE' },
+  { id: 'inorder', label: 'IN' },
+  { id: 'postorder', label: 'POST' },
+  { id: 'levelorder', label: 'LEVEL' },
+];
 
 export const SandboxStudio: React.FC = () => {
   const sandboxWorld = useGameStore((s) => s.sandboxWorld);
@@ -54,6 +77,9 @@ export const SandboxStudio: React.FC = () => {
   const sandboxAddLinkedNode = useGameStore((s) => s.sandboxAddLinkedNode);
   const sandboxToggleLinkedCycle = useGameStore((s) => s.sandboxToggleLinkedCycle);
   const sandboxAddPacket = useGameStore((s) => s.sandboxAddPacket);
+  const sandboxInsertTreeKey = useGameStore((s) => s.sandboxInsertTreeKey);
+  const sandboxRunTreeTraversal = useGameStore((s) => s.sandboxRunTreeTraversal);
+  const sandboxAutoBalanceTree = useGameStore((s) => s.sandboxAutoBalanceTree);
   const handleDirectAction = useGameStore((s) => s.handleDirectAction);
   const runPathfindingSearch = useGameStore((s) => s.runPathfindingSearch);
   const comparePathfindingAlgorithms = useGameStore((s) => s.comparePathfindingAlgorithms);
@@ -73,6 +99,7 @@ export const SandboxStudio: React.FC = () => {
 
   const [presetName, setPresetName] = useState('');
   const [presetsOpen, setPresetsOpen] = useState(false);
+  const [treeKeyInput, setTreeKeyInput] = useState('');
 
   const currentState = getCurrentState(timeline);
   const activeEvent = getActiveEvent(timeline);
@@ -90,12 +117,27 @@ export const SandboxStudio: React.FC = () => {
     setPresetName('');
   };
 
+  const handleTreeInsertSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = treeKeyInput.trim();
+    const parsed = trimmed === '' ? undefined : Number(trimmed);
+    sandboxInsertTreeKey(parsed);
+    setTreeKeyInput('');
+  };
+
+  // Compute best cost and fewest visited among found benchmark rows
+  const foundRows = (pathComparison ?? []).filter((r) => r.pathFound);
+  const minCost =
+    foundRows.length > 0 ? Math.min(...foundRows.map((r) => r.pathCost)) : null;
+  const minVisited =
+    foundRows.length > 0 ? Math.min(...foundRows.map((r) => r.visitedCount)) : null;
+
   const renderWorldTools = () => {
     if (currentState.world === 'arrays') {
       return (
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-2 rounded-lg border border-slate-700/80 bg-slate-950/80 px-2.5 py-1">
-            <span className="text-[10px] font-mono text-slate-400">
+          <div className="flex items-center gap-2 rounded-lg border border-slate-700/60 bg-surface/85 px-2.5 py-1">
+            <span className="text-[11px] font-mono text-slate-300">
               SIZE: {currentState.slots.length}
             </span>
             <input
@@ -107,13 +149,13 @@ export const SandboxStudio: React.FC = () => {
               className="h-1 w-20 accent-neon-cyan"
             />
           </div>
-          <div className="flex items-center gap-1">
-            <span className="text-[10px] font-mono text-slate-500">SORT:</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] font-mono text-slate-400">SORT:</span>
             {(['bubble', 'insertion', 'quick'] as const).map((algo) => (
               <button
                 key={algo}
                 onClick={() => runSandboxSortDemo(algo)}
-                className="rounded-lg border border-cyan-500/40 bg-cyan-500/15 px-2.5 py-1 text-[10px] font-mono font-semibold uppercase text-cyan-200 transition hover:bg-cyan-500/30"
+                className="rounded-lg border border-sky-400/35 bg-sky-500/14 px-2.5 py-1 text-[11px] font-mono font-semibold uppercase text-sky-100 transition hover:bg-sky-500/25"
               >
                 {algo}
               </button>
@@ -128,14 +170,14 @@ export const SandboxStudio: React.FC = () => {
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={sandboxAddLinkedNode}
-            className="flex items-center gap-1 rounded-lg border border-cyan-500/40 bg-cyan-500/15 px-2.5 py-1.5 text-[11px] font-mono text-cyan-200 transition hover:bg-cyan-500/25"
+            className="flex items-center gap-1 rounded-lg border border-sky-400/35 bg-sky-500/14 px-2.5 py-1.5 text-[11px] font-mono text-sky-100 transition hover:bg-sky-500/24"
           >
             <Plus className="h-3.5 w-3.5" />
             <span>ADD NODE</span>
           </button>
           <button
             onClick={sandboxToggleLinkedCycle}
-            className="flex items-center gap-1 rounded-lg border border-amber-500/40 bg-amber-500/15 px-2.5 py-1.5 text-[11px] font-mono text-amber-200 transition hover:bg-amber-500/25"
+            className="flex items-center gap-1 rounded-lg border border-amber-400/35 bg-amber-500/14 px-2.5 py-1.5 text-[11px] font-mono text-amber-200 transition hover:bg-amber-500/24"
           >
             <RefreshCw className="h-3.5 w-3.5" />
             <span>{currentState.hasCycle ? 'SEVER CYCLE' : 'CREATE CYCLE'}</span>
@@ -147,7 +189,7 @@ export const SandboxStudio: React.FC = () => {
                 type: 'STEP_PROBE',
               })
             }
-            className="flex items-center gap-1 rounded-lg border border-violet-400/50 bg-violet-500/20 px-2.5 py-1.5 text-[11px] font-mono text-violet-100 transition hover:bg-violet-500/30"
+            className="flex items-center gap-1 rounded-lg border border-violet-400/40 bg-violet-500/16 px-2.5 py-1.5 text-[11px] font-mono text-violet-100 transition hover:bg-violet-500/26"
           >
             <Radar className="h-3.5 w-3.5" />
             <span>FLOYD PROBE</span>
@@ -162,7 +204,7 @@ export const SandboxStudio: React.FC = () => {
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={sandboxAddPacket}
-            className="flex items-center gap-1 rounded-lg border border-cyan-500/40 bg-cyan-500/15 px-2.5 py-1.5 text-[11px] font-mono text-cyan-200 transition hover:bg-cyan-500/25"
+            className="flex items-center gap-1 rounded-lg border border-sky-400/35 bg-sky-500/14 px-2.5 py-1.5 text-[11px] font-mono text-sky-100 transition hover:bg-sky-500/24"
           >
             <Plus className="h-3.5 w-3.5" />
             <span>ADD PACKET</span>
@@ -170,9 +212,9 @@ export const SandboxStudio: React.FC = () => {
           {buffers.map((buf) => (
             <div
               key={buf.id}
-              className="flex items-center gap-1 rounded-lg border border-slate-700/80 bg-slate-900/80 px-1.5 py-1"
+              className="flex items-center gap-1 rounded-lg border border-slate-700/60 bg-surface/85 px-2 py-1"
             >
-              <span className="px-1 text-[10px] font-mono text-cyan-300">
+              <span className="px-1 text-[11px] font-mono text-sky-200">
                 {buf.label}
               </span>
               <button
@@ -184,7 +226,7 @@ export const SandboxStudio: React.FC = () => {
                     payload: { bufferId: buf.id },
                   })
                 }
-                className="rounded bg-cyan-500/20 px-2 py-0.5 text-[10px] font-mono text-cyan-100 disabled:opacity-35"
+                className="rounded-md bg-sky-500/18 px-2 py-0.5 text-[11px] font-mono text-sky-100 transition hover:bg-sky-500/28 disabled:opacity-35"
               >
                 IN
               </button>
@@ -197,7 +239,7 @@ export const SandboxStudio: React.FC = () => {
                     payload: { bufferId: buf.id },
                   })
                 }
-                className="rounded bg-emerald-500/20 px-2 py-0.5 text-[10px] font-mono text-emerald-100 disabled:opacity-35"
+                className="rounded-md bg-emerald-500/18 px-2 py-0.5 text-[11px] font-mono text-emerald-100 transition hover:bg-emerald-500/28 disabled:opacity-35"
               >
                 OUT
               </button>
@@ -208,7 +250,6 @@ export const SandboxStudio: React.FC = () => {
     }
 
     if (currentState.world === 'pathfinding') {
-      const algos: PathfindingAlgorithm[] = ['bfs', 'dijkstra', 'astar'];
       const tools: Array<{ id: PathPaintTool; label: string }> = [
         { id: 'wall', label: 'Wall' },
         { id: 'weight', label: 'Weight' },
@@ -219,14 +260,14 @@ export const SandboxStudio: React.FC = () => {
       return (
         <div className="flex flex-wrap items-center gap-2">
           {/* Paint Tools */}
-          <div className="flex items-center rounded-lg border border-slate-700/80 bg-slate-950/80 p-0.5">
+          <div className="flex items-center rounded-lg border border-slate-700/60 bg-surface/85 p-0.5">
             {tools.map((t) => (
               <button
                 key={t.id}
                 onClick={() => setPathPaintTool(t.id)}
-                className={`rounded px-2 py-1 text-[10px] font-mono transition ${
+                className={`rounded-md px-2 py-1 text-[11px] font-mono transition ${
                   pathPaintTool === t.id
-                    ? 'bg-amber-500/25 font-bold text-amber-200'
+                    ? 'bg-amber-500/22 font-semibold text-amber-200'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
@@ -235,32 +276,32 @@ export const SandboxStudio: React.FC = () => {
             ))}
           </div>
 
-          {/* Algorithm Selector */}
-          <div className="flex items-center rounded-lg border border-slate-700/80 bg-slate-950/80 p-0.5">
-            {algos.map((algo) => (
+          {/* 6-Algorithm Selector */}
+          <div className="flex flex-wrap items-center rounded-lg border border-slate-700/60 bg-surface/85 p-0.5">
+            {PATHFINDING_ALGOS.map((algo) => (
               <button
-                key={algo}
+                key={algo.id}
                 onClick={() =>
                   handleDirectAction({
                     world: 'pathfinding',
                     type: 'SET_ALGORITHM',
-                    payload: { algorithm: algo },
+                    payload: { algorithm: algo.id },
                   })
                 }
-                className={`rounded px-2 py-1 text-[10px] font-mono font-bold uppercase transition ${
-                  currentState.algorithm === algo
-                    ? 'bg-cyan-500/30 text-cyan-100'
+                className={`rounded-md px-2 py-1 text-[11px] font-mono font-semibold uppercase transition ${
+                  currentState.algorithm === algo.id
+                    ? 'bg-sky-500/25 text-sky-100'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                {algo === 'astar' ? 'A*' : algo}
+                {algo.label}
               </button>
             ))}
           </div>
 
           <button
             onClick={() => runPathfindingSearch(currentState.algorithm)}
-            className="glow-emerald flex items-center gap-1 rounded-lg border border-emerald-400/70 bg-emerald-500/25 px-3 py-1.5 text-[11px] font-mono font-bold text-emerald-100 transition hover:bg-emerald-500/35"
+            className="glow-emerald flex items-center gap-1 rounded-lg border border-emerald-400/50 bg-emerald-500/20 px-3 py-1.5 text-[11px] font-mono font-bold text-emerald-100 transition hover:bg-emerald-500/30"
           >
             <Radar className="h-3.5 w-3.5" />
             <span>RUN WAVE</span>
@@ -268,10 +309,124 @@ export const SandboxStudio: React.FC = () => {
 
           <button
             onClick={comparePathfindingAlgorithms}
-            className="glow-violet flex items-center gap-1 rounded-lg border border-violet-400/60 bg-violet-500/20 px-3 py-1.5 text-[11px] font-mono font-bold text-violet-100 transition hover:bg-violet-500/30"
+            className="glow-violet flex items-center gap-1 rounded-lg border border-violet-400/45 bg-violet-500/18 px-3 py-1.5 text-[11px] font-mono font-bold text-violet-100 transition hover:bg-violet-500/28"
           >
             <BarChart3 className="h-3.5 w-3.5" />
             <span>COMPARE ALL</span>
+          </button>
+        </div>
+      );
+    }
+
+    if (currentState.world === 'trees') {
+      const selectedId = currentState.selectedNodeId;
+      const selectedNode = selectedId ? currentState.nodes[selectedId] : null;
+      return (
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Numeric Key Insert */}
+          <form onSubmit={handleTreeInsertSubmit} className="flex items-center gap-1">
+            <input
+              type="number"
+              min={1}
+              max={99}
+              value={treeKeyInput}
+              onChange={(e) => setTreeKeyInput(e.target.value)}
+              placeholder="Key"
+              className="w-16 rounded-lg border border-slate-700/60 bg-surface/90 px-2 py-1 text-xs font-mono text-slate-100 placeholder-slate-500 focus:border-teal-400/60 focus:outline-none"
+            />
+            <button
+              type="submit"
+              className="flex items-center gap-1 rounded-lg border border-teal-400/45 bg-teal-500/16 px-2.5 py-1.5 text-[11px] font-mono font-semibold text-teal-100 transition hover:bg-teal-500/26"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span>INSERT</span>
+            </button>
+          </form>
+
+          {/* Traversal Waves */}
+          <div className="flex items-center rounded-lg border border-slate-700/60 bg-surface/85 p-0.5">
+            {TREE_TRAVERSALS.map((tr) => (
+              <button
+                key={tr.id}
+                onClick={() => sandboxRunTreeTraversal(tr.id)}
+                className="rounded-md px-2 py-1 text-[11px] font-mono font-semibold text-sky-200 transition hover:bg-sky-500/20 hover:text-sky-100"
+              >
+                {tr.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Selected Node Rotations & Delete */}
+          <div className="flex items-center gap-1">
+            <button
+              disabled={!selectedNode}
+              title={
+                selectedNode
+                  ? `Rotate Left around ${selectedNode.value}`
+                  : 'Select a node first'
+              }
+              onClick={() => {
+                if (!selectedNode) return;
+                handleDirectAction({
+                  world: 'trees',
+                  type: 'ROTATE_LEFT',
+                  payload: { id: selectedNode.id },
+                });
+              }}
+              className="flex items-center gap-1 rounded-lg border border-slate-700/60 bg-surface/85 px-2 py-1.5 text-[11px] font-mono text-teal-200 transition hover:border-teal-400/45 hover:bg-teal-500/15 disabled:opacity-35"
+            >
+              <RotateCcw className="h-3 w-3" />
+              <span>ROT L</span>
+            </button>
+            <button
+              disabled={!selectedNode}
+              title={
+                selectedNode
+                  ? `Rotate Right around ${selectedNode.value}`
+                  : 'Select a node first'
+              }
+              onClick={() => {
+                if (!selectedNode) return;
+                handleDirectAction({
+                  world: 'trees',
+                  type: 'ROTATE_RIGHT',
+                  payload: { id: selectedNode.id },
+                });
+              }}
+              className="flex items-center gap-1 rounded-lg border border-slate-700/60 bg-surface/85 px-2 py-1.5 text-[11px] font-mono text-violet-200 transition hover:border-violet-400/45 hover:bg-violet-500/15 disabled:opacity-35"
+            >
+              <RotateCw className="h-3 w-3" />
+              <span>ROT R</span>
+            </button>
+            <button
+              disabled={!selectedNode}
+              title={
+                selectedNode
+                  ? `Delete node ${selectedNode.value}`
+                  : 'Select a node first'
+              }
+              onClick={() => {
+                if (!selectedNode) return;
+                handleDirectAction({
+                  world: 'trees',
+                  type: 'DELETE_NODE',
+                  payload: { id: selectedNode.id },
+                });
+              }}
+              className="flex items-center gap-1 rounded-lg border border-rose-400/35 bg-rose-500/12 px-2 py-1.5 text-[11px] font-mono text-rose-200 transition hover:bg-rose-500/22 disabled:opacity-35"
+            >
+              <Trash2 className="h-3 w-3" />
+              <span>DEL</span>
+            </button>
+          </div>
+
+          {/* AUTO-AVL Rebalance */}
+          <button
+            onClick={sandboxAutoBalanceTree}
+            className="glow-teal flex items-center gap-1 rounded-lg border border-teal-400/50 bg-teal-500/20 px-3 py-1.5 text-[11px] font-mono font-bold text-teal-100 transition hover:bg-teal-500/30"
+          >
+            <Scale className="h-3.5 w-3.5 text-neon-teal" />
+            <span>AUTO-AVL</span>
           </button>
         </div>
       );
@@ -287,21 +442,21 @@ export const SandboxStudio: React.FC = () => {
         <div className="flex flex-wrap items-center gap-2.5">
           <button
             onClick={goToHub}
-            className="flex items-center gap-1 rounded-lg border border-slate-700/80 bg-slate-900/75 px-2.5 py-1.5 text-xs font-mono text-slate-300 transition hover:border-cyan-400/50 hover:text-cyan-200"
+            className="flex items-center gap-1 rounded-lg border border-slate-700/60 bg-surface/80 px-2.5 py-1.5 text-xs font-mono text-slate-300 transition hover:border-sky-400/45 hover:text-sky-200"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
             <span>HUB</span>
           </button>
 
-          <div className="flex items-center gap-1.5 rounded-lg border border-violet-400/40 bg-violet-500/15 px-2.5 py-1">
+          <div className="flex items-center gap-1.5 rounded-lg border border-violet-400/35 bg-violet-500/14 px-2.5 py-1">
             <FlaskConical className="h-3.5 w-3.5 text-neon-violet" />
             <span className="text-xs font-mono font-bold text-violet-200">
               SANDBOX LAB
             </span>
           </div>
 
-          {/* 4 World Tabs */}
-          <div className="flex flex-wrap items-center gap-1 rounded-xl border border-slate-800 bg-slate-950/75 p-0.5">
+          {/* 5 World Tabs */}
+          <div className="flex flex-wrap items-center gap-1 rounded-xl border border-slate-700/60 bg-surface/80 p-0.5">
             {WORLD_META.map((w) => {
               const active = sandboxWorld === w.id;
               return (
@@ -310,7 +465,9 @@ export const SandboxStudio: React.FC = () => {
                   onClick={() => setSandboxWorld(w.id as WorldId)}
                   className={`rounded-lg px-2.5 py-1 text-[11px] font-mono transition ${
                     active
-                      ? 'bg-cyan-500/25 font-bold text-cyan-100'
+                      ? w.id === 'trees'
+                        ? 'bg-teal-500/22 font-bold text-teal-100'
+                        : 'bg-sky-500/22 font-bold text-sky-100'
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
@@ -327,8 +484,8 @@ export const SandboxStudio: React.FC = () => {
             onClick={() => setPresetsOpen((v) => !v)}
             className={`flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-mono transition ${
               presetsOpen
-                ? 'border-cyan-400/60 bg-cyan-500/20 text-cyan-100'
-                : 'border-slate-700/80 bg-slate-900/75 text-slate-300 hover:border-cyan-400/40'
+                ? 'border-sky-400/50 bg-sky-500/18 text-sky-100'
+                : 'border-slate-700/60 bg-surface/80 text-slate-300 hover:border-sky-400/40'
             }`}
           >
             <Save className="h-3.5 w-3.5" />
@@ -338,7 +495,7 @@ export const SandboxStudio: React.FC = () => {
           <button
             onClick={randomizeSandbox}
             title="Randomize Board"
-            className="flex items-center gap-1 rounded-lg border border-slate-700/80 bg-slate-900/75 px-2.5 py-1.5 text-xs font-mono text-slate-300 transition hover:border-amber-400/50 hover:text-amber-200"
+            className="flex items-center gap-1 rounded-lg border border-slate-700/60 bg-surface/80 px-2.5 py-1.5 text-xs font-mono text-slate-300 transition hover:border-amber-400/45 hover:text-amber-200"
           >
             <Shuffle className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">RANDOM</span>
@@ -347,7 +504,7 @@ export const SandboxStudio: React.FC = () => {
           <button
             onClick={resetSandbox}
             title="Reset Sandbox"
-            className="rounded-lg border border-slate-700/80 bg-slate-900/75 p-1.5 text-slate-300 transition hover:border-slate-500 hover:text-white"
+            className="rounded-lg border border-slate-700/60 bg-surface/80 p-1.5 text-slate-300 transition hover:border-slate-500/70 hover:text-slate-100"
           >
             <RotateCcw className="h-3.5 w-3.5" />
           </button>
@@ -355,14 +512,14 @@ export const SandboxStudio: React.FC = () => {
           <button
             onClick={triggerResetCamera}
             title="Reset Camera"
-            className="rounded-lg p-1.5 text-slate-300 transition hover:bg-slate-800 hover:text-cyan-300"
+            className="rounded-lg p-1.5 text-slate-300 transition hover:bg-slate-800/80 hover:text-sky-300"
           >
             <Camera className="h-3.5 w-3.5" />
           </button>
 
           <button
             onClick={toggleGraphicsQuality}
-            className="rounded-lg bg-slate-900/80 px-2 py-1 text-[10px] font-mono text-cyan-200"
+            className="rounded-lg bg-surface/80 px-2 py-1 text-[11px] font-mono text-sky-200"
           >
             <Sparkles className="mr-1 inline h-3 w-3" />
             {graphicsQuality === 'high' ? 'HI' : 'ECO'}
@@ -370,7 +527,7 @@ export const SandboxStudio: React.FC = () => {
 
           <button
             onClick={toggleAudioMute}
-            className="rounded-lg p-1.5 text-slate-300 hover:bg-slate-800"
+            className="rounded-lg p-1.5 text-slate-300 hover:bg-slate-800/80"
           >
             {audioMuted ? (
               <VolumeX className="h-3.5 w-3.5 text-neon-crimson" />
@@ -392,13 +549,13 @@ export const SandboxStudio: React.FC = () => {
               exit={{ x: -280, opacity: 0 }}
               className="glass-panel pointer-events-auto flex max-h-[65vh] w-72 flex-col overflow-hidden rounded-2xl p-3.5"
             >
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-xs font-mono font-bold text-cyan-200">
+              <div className="mb-2.5 flex items-center justify-between">
+                <span className="text-xs font-mono font-bold text-sky-200">
                   SANDBOX PRESETS
                 </span>
                 <button
                   onClick={() => setPresetsOpen(false)}
-                  className="text-slate-400 hover:text-white"
+                  className="rounded-md p-1 text-slate-400 hover:bg-slate-800/80 hover:text-slate-100"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
@@ -411,11 +568,11 @@ export const SandboxStudio: React.FC = () => {
                   value={presetName}
                   onChange={(e) => setPresetName(e.target.value)}
                   placeholder="Save current board..."
-                  className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-950/90 px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none"
+                  className="min-w-0 flex-1 rounded-lg border border-slate-700/60 bg-surface/90 px-2.5 py-1.5 text-xs text-slate-100 placeholder-slate-500 focus:border-sky-400/60 focus:outline-none"
                 />
                 <button
                   type="submit"
-                  className="rounded-lg border border-cyan-400/60 bg-cyan-500/20 px-2.5 py-1.5 text-xs font-mono font-bold text-cyan-100 hover:bg-cyan-500/30"
+                  className="rounded-lg border border-sky-400/45 bg-sky-500/18 px-2.5 py-1.5 text-xs font-mono font-bold text-sky-100 hover:bg-sky-500/28"
                 >
                   SAVE
                 </button>
@@ -424,15 +581,15 @@ export const SandboxStudio: React.FC = () => {
               <div className="axiom-scroll flex-1 space-y-3 overflow-y-auto pr-1">
                 {/* Built-in */}
                 <div>
-                  <div className="mb-1 text-[10px] font-mono uppercase tracking-wider text-slate-500">
+                  <div className="mb-1.5 text-[10px] font-mono uppercase tracking-wider text-slate-400">
                     BUILT-IN TEMPLATES
                   </div>
-                  <div className="space-y-1">
+                  <div className="space-y-1.5">
                     {builtInForWorld.map((preset) => (
                       <button
                         key={preset.id}
                         onClick={() => loadSandboxPreset(preset)}
-                        className="w-full rounded-lg border border-slate-800 bg-slate-950/75 px-2.5 py-1.5 text-left text-xs text-slate-200 transition hover:border-cyan-400/50 hover:text-cyan-200"
+                        className="w-full rounded-lg border border-slate-700/50 bg-surface/75 px-2.5 py-1.5 text-left text-xs text-slate-200 transition hover:border-sky-400/45 hover:text-sky-100"
                       >
                         {preset.name}
                       </button>
@@ -442,19 +599,19 @@ export const SandboxStudio: React.FC = () => {
 
                 {/* Custom Saved */}
                 <div>
-                  <div className="mb-1 text-[10px] font-mono uppercase tracking-wider text-slate-500">
+                  <div className="mb-1.5 text-[10px] font-mono uppercase tracking-wider text-slate-400">
                     SAVED LOCAL PRESETS ({customForWorld.length})
                   </div>
                   {customForWorld.length === 0 ? (
-                    <div className="text-[11px] text-slate-500">
+                    <div className="text-xs text-slate-400">
                       No custom presets saved yet.
                     </div>
                   ) : (
-                    <div className="space-y-1">
+                    <div className="space-y-1.5">
                       {customForWorld.map((preset) => (
                         <div
                           key={preset.id}
-                          className="flex items-center justify-between gap-1 rounded-lg border border-slate-800 bg-slate-950/75 px-2 py-1"
+                          className="flex items-center justify-between gap-1 rounded-lg border border-slate-700/50 bg-surface/75 px-2.5 py-1"
                         >
                           <button
                             onClick={() => loadSandboxPreset(preset)}
@@ -465,7 +622,7 @@ export const SandboxStudio: React.FC = () => {
                           <button
                             onClick={() => deleteSandboxPreset(preset.id)}
                             title="Delete Preset"
-                            className="p-1 text-slate-500 hover:text-neon-crimson"
+                            className="p-1 text-slate-400 hover:text-neon-crimson"
                           >
                             <Trash2 className="h-3 w-3" />
                           </button>
@@ -486,24 +643,24 @@ export const SandboxStudio: React.FC = () => {
               initial={{ y: -10, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: -10, opacity: 0 }}
-              className="pointer-events-auto mx-auto flex items-center gap-2 rounded-full border border-cyan-500/50 bg-slate-900/90 px-4 py-1.5 text-xs font-mono text-cyan-100"
+              className="pointer-events-auto mx-auto flex items-center gap-2 rounded-full border border-sky-400/45 bg-surface/95 px-4 py-1.5 text-xs font-mono text-sky-100 shadow-lg backdrop-blur-md"
             >
               <span>{statusToast.message}</span>
-              <button onClick={clearToast}>
+              <button onClick={clearToast} className="opacity-75 hover:opacity-100">
                 <X className="h-3.5 w-3.5" />
               </button>
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* Right: Pathfinding Comparison Table */}
+        {/* Right: 6-Algorithm Pathfinding Benchmark Table */}
         <AnimatePresence>
           {pathComparison && sandboxWorld === 'pathfinding' && !codeDrawerOpen && (
             <motion.div
               initial={{ x: 260, opacity: 0 }}
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: 260, opacity: 0 }}
-              className="glass-panel pointer-events-auto ml-auto w-80 rounded-2xl p-4"
+              className="glass-panel pointer-events-auto ml-auto w-[340px] rounded-2xl p-4"
             >
               <div className="mb-2.5 flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-xs font-mono font-bold text-violet-200">
@@ -511,38 +668,67 @@ export const SandboxStudio: React.FC = () => {
                   ALGORITHM BENCHMARK
                 </span>
                 <span className="text-[10px] font-mono text-slate-400">
-                  BFS vs Dijkstra vs A*
+                  6 Search Strategies
                 </span>
               </div>
-              <table className="w-full text-left font-mono text-[11px]">
+              <table className="w-full text-left font-mono text-xs">
                 <thead>
-                  <tr className="border-b border-slate-800 text-[10px] text-slate-500">
-                    <th className="py-1">ALGO</th>
-                    <th className="py-1 text-right">COST</th>
-                    <th className="py-1 text-right">VISITED</th>
-                    <th className="py-1 text-right">FRONTIER</th>
+                  <tr className="border-b border-slate-700/60 text-[10px] text-slate-400">
+                    <th className="py-1.5">ALGO</th>
+                    <th className="py-1.5 text-right">COST</th>
+                    <th className="py-1.5 text-right">VISITED</th>
+                    <th className="py-1.5 text-right">FRONTIER</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {pathComparison.map((row) => (
-                    <tr
-                      key={row.algorithm}
-                      className="border-b border-slate-800/50 last:border-0"
-                    >
-                      <td className="py-1.5 font-bold uppercase text-cyan-200">
-                        {row.algorithm === 'astar' ? 'A*' : row.algorithm}
-                      </td>
-                      <td className="py-1.5 text-right text-emerald-300">
-                        {row.pathFound ? row.pathCost : 'N/A'}
-                      </td>
-                      <td className="py-1.5 text-right text-amber-200">
-                        {row.visitedCount}
-                      </td>
-                      <td className="py-1.5 text-right text-violet-300">
-                        {row.peakFrontier}
-                      </td>
-                    </tr>
-                  ))}
+                  {pathComparison.map((row) => {
+                    const meta = PATHFINDING_ALGOS.find((a) => a.id === row.algorithm);
+                    const isBestCost =
+                      row.pathFound && minCost !== null && row.pathCost === minCost;
+                    const isBestVisited =
+                      row.pathFound &&
+                      minVisited !== null &&
+                      row.visitedCount === minVisited;
+                    return (
+                      <tr
+                        key={row.algorithm}
+                        className="border-b border-slate-800/60 last:border-0"
+                      >
+                        <td className="py-1.5 font-semibold text-slate-200">
+                          {meta ? meta.full : row.algorithm}
+                        </td>
+                        <td className="py-1.5 text-right">
+                          {row.pathFound ? (
+                            <span
+                              className={
+                                isBestCost
+                                  ? 'rounded bg-emerald-500/18 px-1.5 py-0.5 font-bold text-neon-emerald'
+                                  : 'text-slate-300'
+                              }
+                            >
+                              {row.pathCost}
+                            </span>
+                          ) : (
+                            <span className="text-rose-300">N/A</span>
+                          )}
+                        </td>
+                        <td className="py-1.5 text-right">
+                          <span
+                            className={
+                              isBestVisited
+                                ? 'rounded bg-sky-500/18 px-1.5 py-0.5 font-bold text-neon-cyan'
+                                : 'text-amber-200/90'
+                            }
+                          >
+                            {row.visitedCount}
+                          </span>
+                        </td>
+                        <td className="py-1.5 text-right text-violet-300">
+                          {row.peakFrontier}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </motion.div>
@@ -553,7 +739,7 @@ export const SandboxStudio: React.FC = () => {
       {/* BOTTOM SANDBOX DOCK */}
       <footer className="glass-panel pointer-events-auto flex flex-col gap-2 rounded-2xl px-3.5 py-2.5">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2 font-mono text-[11px] text-slate-400">
+          <div className="flex items-center gap-2 font-mono text-xs text-slate-400">
             <span>
               CYCLES: <strong className="text-neon-cyan">{metrics.cycles}</strong>
             </span>
@@ -569,8 +755,8 @@ export const SandboxStudio: React.FC = () => {
             onClick={() => setCodeDrawerOpen(!codeDrawerOpen)}
             className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-mono transition ${
               codeDrawerOpen
-                ? 'border-emerald-400/60 bg-emerald-500/20 text-emerald-100'
-                : 'border-slate-700/80 bg-slate-900/75 text-slate-300 hover:border-emerald-400/40'
+                ? 'border-emerald-400/50 bg-emerald-500/18 text-emerald-100'
+                : 'border-slate-700/60 bg-surface/80 text-slate-300 hover:border-emerald-400/40'
             }`}
           >
             <Code2 className="h-3.5 w-3.5" />
@@ -579,37 +765,37 @@ export const SandboxStudio: React.FC = () => {
         </div>
 
         {/* Shared Playback Scrubber */}
-        <div className="flex flex-wrap items-center gap-2.5 border-t border-slate-800/80 pt-2">
+        <div className="flex flex-wrap items-center gap-2.5 border-t border-slate-700/50 pt-2">
           <div className="flex items-center gap-1">
             <button
               onClick={rewindTimeline}
               disabled={totalEvents === 0}
-              className="rounded-md p-1.5 text-slate-300 hover:bg-slate-800 disabled:opacity-35"
+              className="rounded-md p-1.5 text-slate-300 hover:bg-slate-800/80 disabled:opacity-35"
             >
               <SkipBack className="h-3.5 w-3.5" />
             </button>
             <button
               onClick={stepBack}
               disabled={timeline.cursor <= -1}
-              className="rounded-md p-1.5 text-slate-300 hover:bg-slate-800 disabled:opacity-35"
+              className="rounded-md p-1.5 text-slate-300 hover:bg-slate-800/80 disabled:opacity-35"
             >
               <StepBack className="h-3.5 w-3.5" />
             </button>
             <button
               onClick={timeline.isPlaying ? pauseTimeline : playTimeline}
               disabled={totalEvents === 0}
-              className="flex h-7 w-7 items-center justify-center rounded-lg border border-cyan-400/50 bg-cyan-500/20 text-cyan-200 disabled:opacity-35"
+              className="flex h-7 w-7 items-center justify-center rounded-lg border border-sky-400/45 bg-sky-500/18 text-sky-200 transition hover:bg-sky-500/28 disabled:opacity-35"
             >
               {timeline.isPlaying ? (
                 <Pause className="h-3.5 w-3.5" />
               ) : (
-                <Play className="h-3.5 w-3.5 fill-cyan-300" />
+                <Play className="h-3.5 w-3.5 fill-sky-300" />
               )}
             </button>
             <button
               onClick={stepForward}
               disabled={timeline.cursor >= totalEvents - 1}
-              className="rounded-md p-1.5 text-slate-300 hover:bg-slate-800 disabled:opacity-35"
+              className="rounded-md p-1.5 text-slate-300 hover:bg-slate-800/80 disabled:opacity-35"
             >
               <SkipForward className="h-3.5 w-3.5" />
             </button>
@@ -625,20 +811,20 @@ export const SandboxStudio: React.FC = () => {
               onChange={(e) => seekTimeline(Number(e.target.value))}
               className="h-1.5 w-full cursor-pointer accent-neon-cyan"
             />
-            <span className="w-12 shrink-0 text-right font-mono text-[10px] text-slate-400">
+            <span className="w-12 shrink-0 text-right font-mono text-[11px] text-slate-400">
               {timeline.cursor + 1}/{totalEvents}
             </span>
           </div>
 
-          <div className="flex items-center rounded-md border border-slate-800 bg-slate-950/75 p-0.5">
+          <div className="flex items-center rounded-md border border-slate-700/60 bg-surface/80 p-0.5">
             {SPEEDS.map((spd) => (
               <button
                 key={spd}
                 onClick={() => setSpeed(spd)}
-                className={`rounded px-1.5 py-0.5 font-mono text-[10px] ${
+                className={`rounded px-1.5 py-0.5 font-mono text-[11px] transition ${
                   timeline.speed === spd
-                    ? 'bg-cyan-500/30 font-bold text-cyan-200'
-                    : 'text-slate-500 hover:text-slate-200'
+                    ? 'bg-sky-500/25 font-bold text-sky-100'
+                    : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
                 {spd}x
@@ -646,7 +832,7 @@ export const SandboxStudio: React.FC = () => {
             ))}
           </div>
 
-          <div className="hidden max-w-xs truncate rounded-full border border-slate-800 bg-slate-950/80 px-3 py-1 font-mono text-[10px] text-cyan-300/90 md:block">
+          <div className="hidden max-w-xs truncate rounded-full border border-slate-700/60 bg-surface/80 px-3 py-1 font-mono text-[11px] text-sky-200 md:block">
             {activeEvent ? `[${activeEvent.type}] ${activeEvent.label}` : 'SANDBOX READY'}
           </div>
         </div>

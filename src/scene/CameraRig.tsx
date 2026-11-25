@@ -53,6 +53,26 @@ function computeIdealZoom(
   } else if (worldState.world === 'pathfinding') {
     const maxGrid = Math.max(worldState.width, worldState.height);
     worldSpan = Math.max(10, maxGrid * 1.48 + 2.5);
+  } else if (worldState.world === 'trees') {
+    const nodes = Object.values(worldState.nodes);
+    if (nodes.length > 0) {
+      let minX = Infinity;
+      let maxX = -Infinity;
+      let minZ = Infinity;
+      let maxZ = -Infinity;
+      for (const n of nodes) {
+        minX = Math.min(minX, n.pos[0]);
+        maxX = Math.max(maxX, n.pos[0]);
+        minZ = Math.min(minZ, n.pos[2]);
+        maxZ = Math.max(maxZ, n.pos[2]);
+      }
+      const hasDropSockets = worldState.pendingQueue.length > 0;
+      const spanX = maxX - minX + (hasDropSockets ? 6.4 : 4.6);
+      const spanZ = maxZ - minZ + (hasDropSockets ? 6.8 : 5.2);
+      worldSpan = Math.max(12.5, spanX, spanZ);
+    } else {
+      worldSpan = 13.5;
+    }
   }
 
   const rawZoom = (minDim / worldSpan) * 0.88 * aspectFactor;

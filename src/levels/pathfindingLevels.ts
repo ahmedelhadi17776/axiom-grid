@@ -108,7 +108,7 @@ export const PATHFINDING_LEVELS: LevelDefinition<PathfindingWorldState>[] = [
       '    if neighbor not visited: mark & enqueue',
     ],
     starterCode: `// Deploy Breadth-First Search across the unweighted 8x8 circuit grid.
-// API: api.setAlgorithm('bfs' | 'dijkstra' | 'astar'), api.setWall(x, y, bool), api.setWeight(x, y, w), api.runSearch()
+// API: api.setAlgorithm('bfs' | 'dfs' | 'dijkstra' | 'greedy' | 'astar' | 'bidirectional'), api.setWall(x, y, bool), api.setWeight(x, y, w), api.runSearch()
 
 api.setAlgorithm('bfs');
 api.runSearch();
@@ -116,6 +116,11 @@ api.runSearch();
     referenceSolution: `api.setAlgorithm('bfs');
 api.runSearch();
 `,
+    hints: [
+      'Every open tile on this grid has uniform weight 1, so hop count equals path cost.',
+      'Breadth-First Search expands in concentric distance rings, guaranteeing shortest hops.',
+      'Select BFS (or run api.setAlgorithm("bfs"); api.runSearch()) to route around the firewall in 10 hops.',
+    ],
     insight:
       'BFS expands ring by ring in exact hop distance using a FIFO queue—guaranteeing the shortest path on any unweighted graph in O(V + E) time.',
     bigOIntuition:
@@ -182,6 +187,11 @@ api.runSearch();
     referenceSolution: `api.setAlgorithm('dijkstra');
 api.runSearch();
 `,
+    hints: [
+      'BFS treats weight-5 amber tiles as cost 1, marching straight through for a total toll of 13.',
+      'Dijkstra uses a min-priority queue keyed by cumulative cost g(n) to route around expensive tiles.',
+      'Switch the algorithm to "dijkstra" and run the search to take the cost-9 northern detour.',
+    ],
     insight:
       'BFS counts hops, not tolls—so it marches straight through cost-5 amber monoliths (cost 13). Dijkstra uses a min-priority queue to always settle the cheapest cumulative cost first (cost 9).',
     bigOIntuition:
@@ -242,6 +252,11 @@ api.runSearch();
     referenceSolution: `api.setAlgorithm('astar');
 api.runSearch();
 `,
+    hints: [
+      'Dijkstra expands equally in every direction because it has no sense of where the goal lies.',
+      'A* adds Manhattan distance h(n) to path cost g(n), pulling the frontier straight toward the beacon.',
+      'Switch to "astar" and runSearch() to keep visited nodes well under 45 while preserving cost 11.',
+    ],
     insight:
       'Adding an admissible heuristic h(n) (Manhattan distance) focuses A* directly toward the target—slashing visited nodes dramatically while preserving exact optimality.',
     bigOIntuition:
@@ -320,9 +335,153 @@ api.setWall(6, 4, false);
 api.setAlgorithm('astar');
 api.runSearch();
 `,
+    hints: [
+      'Both start (1, 4) and goal (8, 4) sit on row y = 4, separated by two vertical firewalls.',
+      'Use your 2 breach charges to punch directly through row y = 4 rather than paying the northern weight-5 tolls.',
+      'Clear walls (4, 4) and (6, 4), then run A* for a straight cost-7 beam.',
+    ],
     insight:
       'Algorithmic efficiency and graph topology work hand in hand: removing just two bottleneck barriers turns a costly 25-unit weighted detour into a laser-straight 7-unit A* beam.',
     bigOIntuition:
       'On an unobstructed corridor aligned with the goal, A* expands nearly O(d) nodes—linear in path length rather than quadratic in grid area.',
+  },
+  {
+    id: 'pathfinding-5',
+    code: '4.5',
+    worldId: 'pathfinding',
+    order: 5,
+    title: 'Concave Trap',
+    concept: 'Greedy Best-First vs. A* Admissibility',
+    brief: 'Greedy Best-First dives blind into the weighted U-trap straight ahead. Switch to A* to respect both g(n) and h(n).',
+    goalSummary: 'Beat the U-trap with optimal cost <= 13 & visited <= 48 (use A*)',
+    objectiveKind: 'path-efficient-search',
+    meta: {
+      maxCost: 13,
+      maxVisited: 48,
+    },
+    initialState: buildGridState({
+      width: 10,
+      height: 10,
+      start: [1, 4],
+      goal: [8, 4],
+      algorithm: 'greedy',
+      editableBudget: 0,
+      walls: [
+        [3, 2],
+        [4, 2],
+        [5, 2],
+        [5, 3],
+        [5, 5],
+        [5, 6],
+        [3, 6],
+        [4, 6],
+      ],
+      weights: [
+        [3, 3, 5],
+        [3, 4, 5],
+        [3, 5, 5],
+        [4, 3, 5],
+        [4, 4, 5],
+        [4, 5, 5],
+        [5, 4, 5],
+        [6, 4, 5],
+      ],
+    }),
+    par: {
+      sRankCycles: 46,
+      threeStarCycles: 54,
+      twoStarCycles: 68,
+      maxAuxMemory: 24,
+      targetBigO: 'A* f(n) = g(n) + h(n)',
+    },
+    pseudocode: [
+      '// Greedy uses only h(n) and walks straight into the weight-5 canyon!',
+      '// A* combines accumulated cost g(n) + Manhattan heuristic h(n):',
+      'setAlgorithm("astar")',
+      'runSearch()  // Routes cleanly around the U-trap at cost 13',
+    ],
+    starterCode: `// Greedy Best-First minimizes ONLY h(n), ignoring the cost-5 canyon floor!
+// Switch to A* so the search accounts for both accumulated cost g(n) and h(n).
+
+api.setAlgorithm('greedy'); // TODO: switch to 'astar'
+api.runSearch();
+`,
+    referenceSolution: `api.setAlgorithm('astar');
+api.runSearch();
+`,
+    hints: [
+      'Greedy Best-First ranks nodes purely by Manhattan distance h(n), ignoring tile tolls completely.',
+      'Because the center gap points straight at (8, 4), Greedy pays cost 23 crossing the amber floor.',
+      'Switch to "astar" so f(n) = g(n) + h(n) rejects the heavy corridor and loops cleanly around for cost 13.',
+    ],
+    insight:
+      'Greedy Best-First is fast but non-optimal—it ignores accumulated cost g(n) and marches right into high-toll traps. A* balances g(n) + h(n) to guarantee the optimal detour.',
+    bigOIntuition:
+      'Whenever h(n) is admissible (never overestimates true remaining cost), A* guarantees optimal cost while still pruning far more states than Dijkstra.',
+  },
+  {
+    id: 'pathfinding-6',
+    code: '4.6',
+    worldId: 'pathfinding',
+    order: 6,
+    title: 'Twin Wavefront',
+    concept: 'Bidirectional BFS — O(b^(d/2))',
+    brief: 'Single-source BFS floods this 12x12 arena past the visited budget. Launch Bidirectional BFS so start and goal waves collide mid-grid.',
+    goalSummary: 'Reach goal in cost <= 12 while visiting <= 56 tiles (Bidirectional)',
+    objectiveKind: 'path-efficient-search',
+    meta: {
+      maxCost: 12,
+      maxVisited: 56,
+    },
+    initialState: buildGridState({
+      width: 12,
+      height: 12,
+      start: [1, 5],
+      goal: [10, 6],
+      algorithm: 'bfs',
+      editableBudget: 0,
+      walls: [
+        [4, 2],
+        [4, 3],
+        [4, 8],
+        [4, 9],
+        [7, 2],
+        [7, 3],
+        [7, 8],
+        [7, 9],
+      ],
+    }),
+    par: {
+      sRankCycles: 56,
+      threeStarCycles: 64,
+      twoStarCycles: 76,
+      maxAuxMemory: 32,
+      targetBigO: 'O(b^(d/2)) twin waves',
+    },
+    pseudocode: [
+      'openStart = [start]; openGoal = [goal]',
+      'while openStart and openGoal are non-empty:',
+      '  expand one layer from start wave (cyan)',
+      '  expand one layer from goal wave (violet)',
+      '  if waves touch: stitch start -> meet -> goal!',
+    ],
+    starterCode: `// Single-source BFS floods over 80 tiles on this 12x12 arena!
+// Switch to 'bidirectional' to launch twin wavefronts from start and goal.
+
+api.setAlgorithm('bfs'); // TODO: switch to 'bidirectional'
+api.runSearch();
+`,
+    referenceSolution: `api.setAlgorithm('bidirectional');
+api.runSearch();
+`,
+    hints: [
+      'A single BFS circle of radius d has area proportional to d^2—flooding most of this 12x12 grid.',
+      'Two half-radius circles of radius d/2 cover only 2 * (d/2)^2 = half the area!',
+      'Switch to "bidirectional" and runSearch() to watch the cyan and violet waves collide in the center.',
+    ],
+    insight:
+      'Bidirectional BFS shrinks search complexity from O(b^d) down to O(b^(d/2)) by meeting halfway—dramatically cutting explored tiles on unweighted graphs while keeping exact shortest-hop optimality.',
+    bigOIntuition:
+      'Two expanding disks of radius d/2 cover roughly half the 2D area of a single disk of radius d—and exponentially less in high-branching graphs.',
   },
 ];

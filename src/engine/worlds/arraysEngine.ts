@@ -16,12 +16,16 @@ export function cloneArraysState(state: ArraysWorldState): ArraysWorldState {
     window: state.window ? [state.window[0], state.window[1]] : undefined,
     auxSlots: state.auxSlots ? [...state.auxSlots] : undefined,
     targetValues: state.targetValues ? [...state.targetValues] : undefined,
+    searchTarget: state.searchTarget,
+    probedIndices: state.probedIndices ? [...state.probedIndices] : undefined,
+    foundIndex: state.foundIndex,
   };
 }
 
 export interface ArraysSession {
   readonly length: number;
   get(i: number): number;
+  probe(index: number): number;
   compare(i: number, j: number): number;
   swap(i: number, j: number): void;
   setPointer(name: string, index: number): void;
@@ -125,6 +129,62 @@ export function createArraysSession(initialState: ArraysWorldState): ArraysSessi
         return Number.NaN;
       }
       return state.slots[i].value;
+    },
+
+    probe(index: number): number {
+      if (!isValidIndex(index)) {
+        emitBoundsFault('probe', [index]);
+        return 0;
+      }
+
+      clearTransientStates();
+      const slot = state.slots[index];
+      metrics.cycles += 1;
+
+      if (!state.probedIndices) {
+        state.probedIndices = [];
+      }
+      if (!state.probedIndices.includes(index)) {
+        state.probedIndices.push(index);
+      }
+
+      const target = state.searchTarget;
+      if (target === undefined) {
+        slot.state = 'comparing';
+        pushEvent(
+          'PROBE',
+          `Probe [${index}](${slot.value})`,
+          1,
+          [slot.id],
+          { cycles: 1 },
+          normalizePitch(slot.value, state.slots)
+        );
+        return 0;
+      }
+
+      const cmp = slot.value < target ? -1 : slot.value > target ? 1 : 0;
+      if (cmp === 0) {
+        state.foundIndex = index;
+        slot.state = 'sorted';
+      } else {
+        slot.state = 'comparing';
+      }
+
+      const label =
+        cmp === 0
+          ? `Found target ${target} at [${index}]!`
+          : `[${index}](${slot.value}) ${cmp < 0 ? '<' : '>'} target ${target} — search ${cmp < 0 ? 'right' : 'left'}`;
+
+      pushEvent(
+        'PROBE',
+        label,
+        cmp === 0 ? 3 : 2,
+        [slot.id],
+        { cycles: 1 },
+        cmp === 0 ? 0.95 : normalizePitch(slot.value, state.slots)
+      );
+
+      return cmp;
     },
 
     compare(i: number, j: number): number {
@@ -473,6 +533,56 @@ export function evaluateArraysLevel(
             `Window [${left}..${right}] has sum ${windowSum}${expectedSum !== undefined ? ` (target max sum is ${expectedSum})` : ''}.`
           );
         }
+      }
+      return evaluateScore(true, metrics, level.par, level.insight);
+    }
+
+    case 'binary-search': {
+      const target = state.searchTarget ?? level.initialState.searchTarget;
+      const foundIdx = state.foundIndex;
+      if (
+        foundIdx === null ||
+        foundIdx === undefined ||
+        foundIdx < 0 ||
+        foundIdx >= state.slots.length ||
+        (target !== undefined && state.slots[foundIdx].value !== target)
+      ) {
+        return evaluateScore(
+          false,
+          metrics,
+          level.par,
+          level.insight,
+          `Target ${target ?? '?'} not found yet. Probe the midpoint and halve the search interval!`
+        );
+      }
+      return evaluateScore(true, metrics, level.par, level.insight);
+    }
+
+    case 'dutch-flag-partition': {
+      const initialVals = level.initialState.slots.map((s) => s.value);
+      const computedExpected = [...initialVals].sort((a, b) => a - b);
+      const expected =
+        state.targetValues ??
+        level.initialState.targetValues ??
+        computedExpected;
+
+      if (!arraysEqual(values, expected)) {
+        return evaluateScore(
+          false,
+          metrics,
+          level.par,
+          level.insight,
+          `Expected 3-way partition [${expected.join(', ')}], got [${values.join(', ')}].`
+        );
+      }
+      if (metrics.auxMemory > level.par.maxAuxMemory) {
+        return evaluateScore(
+          false,
+          metrics,
+          level.par,
+          level.insight,
+          `In-place constraint violated: used ${metrics.auxMemory} aux slots (max ${level.par.maxAuxMemory}).`
+        );
       }
       return evaluateScore(true, metrics, level.par, level.insight);
     }

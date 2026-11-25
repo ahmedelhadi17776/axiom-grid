@@ -32,7 +32,7 @@ function EnergyConduit({
   const pulseRef = useRef<THREE.Mesh | null>(null);
   const pulsePos = useMemo(() => new THREE.Vector3(), []);
 
-  const { curve, geometry } = useMemo(() => {
+  const { curve, coreGeometry, sheathGeometry } = useMemo(() => {
     const start = new THREE.Vector3(from[0], from[1] + 1.15, from[2]);
     const end = new THREE.Vector3(to[0], to[1] + 1.15, to[2]);
 
@@ -59,19 +59,22 @@ function EnergyConduit({
       c = new THREE.CatmullRomCurve3([start, mid, end]);
     }
 
-    const tube = new THREE.TubeGeometry(c, isSelfLoop ? 32 : 24, isPreview ? 0.045 : 0.06, 8, false);
-    return { curve: c, geometry: tube };
+    const segments = isSelfLoop ? 36 : 28;
+    const coreTube = new THREE.TubeGeometry(c, segments, isPreview ? 0.036 : 0.046, 10, false);
+    const sheathTube = new THREE.TubeGeometry(c, segments, isPreview ? 0.072 : 0.092, 10, false);
+    return { curve: c, coreGeometry: coreTube, sheathGeometry: sheathTube };
   }, [from, to, isSelfLoop, isCycleOrBack, isPreview]);
 
   useEffect(() => {
     return () => {
-      geometry.dispose();
+      coreGeometry.dispose();
+      sheathGeometry.dispose();
     };
-  }, [geometry]);
+  }, [coreGeometry, sheathGeometry]);
 
   useFrame((clockState) => {
     if (!pulseRef.current) return;
-    const speed = isPreview ? 1.4 : 0.58;
+    const speed = isPreview ? 1.3 : 0.55;
     const t = (clockState.clock.elapsedTime * speed) % 1;
     curve.getPointAt(t, pulsePos);
     pulseRef.current.position.copy(pulsePos);
@@ -79,23 +82,39 @@ function EnergyConduit({
 
   return (
     <group>
-      <mesh geometry={geometry}>
+      {/* Inner luminous energy filament */}
+      <mesh geometry={coreGeometry}>
         <meshStandardMaterial
           color={color}
           emissive={color}
-          emissiveIntensity={isPreview ? 2.2 : 1.7}
+          emissiveIntensity={isPreview ? 1.45 : 1.2}
           toneMapped={false}
           transparent={isPreview}
-          opacity={isPreview ? 0.75 : 1}
+          opacity={isPreview ? 0.8 : 1}
+          roughness={0.25}
         />
       </mesh>
-      <mesh ref={pulseRef}>
-        <sphereGeometry args={[isPreview ? 0.11 : 0.14, 10, 10]} />
+      {/* Subtle translucent outer energy sheath */}
+      <mesh geometry={sheathGeometry}>
         <meshStandardMaterial
-          color="#FFFFFF"
+          color={color}
           emissive={color}
-          emissiveIntensity={2.6}
+          emissiveIntensity={0.55}
+          transparent
+          opacity={isPreview ? 0.22 : 0.18}
+          roughness={0.18}
+          depthWrite={false}
+        />
+      </mesh>
+      {/* Traveling data pulse orb */}
+      <mesh ref={pulseRef}>
+        <sphereGeometry args={[isPreview ? 0.1 : 0.125, 12, 12]} />
+        <meshStandardMaterial
+          color="#F8FAFC"
+          emissive={color}
+          emissiveIntensity={1.55}
           toneMapped={false}
+          roughness={0.15}
         />
       </mesh>
     </group>
@@ -129,31 +148,34 @@ function HexNode({
   const warnRingRef = useRef<THREE.Mesh | null>(null);
 
   const primaryColor = node.leaked
-    ? '#FF2A5F'
+    ? '#FB7185'
     : node.corrupted
-      ? '#FF5533'
+      ? '#F97316'
       : isSelected
-        ? '#00F0FF'
+        ? '#38BDF8'
         : isHead
-          ? '#00FF9D'
+          ? '#34D399'
           : isHovered
-            ? '#38BDF8'
-            : '#00F0FF';
+            ? '#7DD3FC'
+            : '#38BDF8';
+
+  const chassisColor = node.leaked ? '#2A1420' : node.corrupted ? '#2B1912' : '#131E34';
+  const capColor = node.leaked ? '#331926' : node.corrupted ? '#352017' : '#192742';
 
   useFrame((clockState) => {
     const t = clockState.clock.elapsedTime;
     if (coreRef.current) {
       if (node.leaked) {
-        coreRef.current.position.y = 0.48 + Math.sin(t * 22) * 0.03;
-        coreRef.current.position.x = Math.sin(t * 31) * 0.035;
+        coreRef.current.position.y = 0.48 + Math.sin(t * 20) * 0.025;
+        coreRef.current.position.x = Math.sin(t * 28) * 0.03;
       } else {
-        const bob = Math.sin(t * 2.2 + node.pos[0] * 0.9) * 0.09;
-        coreRef.current.position.y = 1.15 + bob + (isSelected ? 0.18 : 0);
+        const bob = Math.sin(t * 2.0 + node.pos[0] * 0.9) * 0.08;
+        coreRef.current.position.y = 1.15 + bob + (isSelected ? 0.16 : 0);
         coreRef.current.position.x = 0;
       }
     }
     if (warnRingRef.current) {
-      warnRingRef.current.rotation.z = t * 2.4;
+      warnRingRef.current.rotation.z = t * 2.0;
     }
   });
 
@@ -186,13 +208,17 @@ function HexNode({
 
   return (
     <group position={[node.pos[0], node.pos[1], node.pos[2]]}>
-      {/* Floor address pad */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.04, 0]}>
-        <ringGeometry args={[0.52, 0.68, 6]} />
+      {/* Soft recessed floor address pad */}
+      <mesh position={[0, 0.02, 0]} receiveShadow>
+        <cylinderGeometry args={[0.64, 0.72, 0.04, 6]} />
+        <meshStandardMaterial color="#121B2E" roughness={0.55} metalness={0.55} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.045, 0]}>
+        <ringGeometry args={[0.53, 0.63, 6]} />
         <meshStandardMaterial
           color={primaryColor}
           emissive={primaryColor}
-          emissiveIntensity={node.leaked ? 1.8 : 1.1}
+          emissiveIntensity={node.leaked ? 1.25 : 0.85}
           toneMapped={false}
           side={THREE.DoubleSide}
         />
@@ -201,65 +227,102 @@ function HexNode({
       {/* Node ID badge on floor */}
       <CanvasLabel
         text={node.id}
-        position={[0, 0.12, 0.92]}
+        position={[0, 0.14, 0.94]}
         scale={0.3}
         fontSize={32}
-        color={node.leaked ? '#FF6B8E' : '#8BA6D9'}
+        color={node.leaked ? '#FDA4AF' : '#94A3B8'}
         borderColor={primaryColor}
       />
 
-      {/* Floating hexagonal memory core */}
-      <group ref={coreRef} position={[0, 1.15, 0]}>
-        <mesh
-          castShadow
-          onPointerOver={handleOver}
-          onPointerOut={handleOut}
-          onClick={handleClick}
-          onContextMenu={handleContext}
-        >
-          <cylinderGeometry args={[0.62, 0.62, 0.56, 6]} />
+      {/* Multi-layered floating hexagonal memory plinth */}
+      <group
+        ref={coreRef}
+        position={[0, 1.15, 0]}
+        onPointerOver={handleOver}
+        onPointerOut={handleOut}
+        onClick={handleClick}
+        onContextMenu={handleContext}
+      >
+        {/* Lower chamfered metallic chassis */}
+        <mesh position={[0, -0.2, 0]} castShadow>
+          <cylinderGeometry args={[0.6, 0.52, 0.18, 6]} />
           <meshStandardMaterial
-            color={node.leaked ? '#2D0A14' : node.corrupted ? '#331208' : '#0E1B33'}
-            emissive={primaryColor}
-            emissiveIntensity={isSelected ? 0.7 : 0.25}
-            roughness={0.3}
-            metalness={0.65}
+            color={chassisColor}
+            roughness={0.34}
+            metalness={0.72}
           />
         </mesh>
 
-        {/* Glowing neon hex top rim */}
-        <mesh position={[0, 0.3, 0]}>
-          <cylinderGeometry args={[0.64, 0.64, 0.06, 6]} />
+        {/* Middle frosted crystal core */}
+        <mesh position={[0, 0, 0]} castShadow>
+          <cylinderGeometry args={[0.54, 0.54, 0.24, 6]} />
+          <meshStandardMaterial
+            color={chassisColor}
+            emissive={primaryColor}
+            emissiveIntensity={isSelected ? 0.85 : isHovered ? 0.65 : 0.45}
+            roughness={0.22}
+            metalness={0.25}
+            transparent
+            opacity={0.92}
+          />
+        </mesh>
+
+        {/* Recessed glowing waist accent ring */}
+        <mesh position={[0, 0, 0]}>
+          <cylinderGeometry args={[0.625, 0.625, 0.055, 6]} />
           <meshStandardMaterial
             color={primaryColor}
             emissive={primaryColor}
-            emissiveIntensity={isSelected ? 2.4 : 1.8}
+            emissiveIntensity={isSelected ? 1.55 : isHovered ? 1.35 : 1.15}
             toneMapped={false}
+            roughness={0.25}
+          />
+        </mesh>
+
+        {/* Upper beveled metallic cap */}
+        <mesh position={[0, 0.2, 0]} castShadow>
+          <cylinderGeometry args={[0.56, 0.62, 0.16, 6]} />
+          <meshStandardMaterial
+            color={capColor}
+            roughness={0.3}
+            metalness={0.7}
+          />
+        </mesh>
+
+        {/* Crisp top glowing hex inlay ring */}
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.285, 0]}>
+          <ringGeometry args={[0.42, 0.52, 6]} />
+          <meshStandardMaterial
+            color={primaryColor}
+            emissive={primaryColor}
+            emissiveIntensity={isSelected ? 1.55 : 1.2}
+            toneMapped={false}
+            side={THREE.DoubleSide}
           />
         </mesh>
 
         {/* Selection / Rewire Halo */}
         {isSelected && (
           <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]}>
-            <ringGeometry args={[0.78, 0.92, 6]} />
+            <ringGeometry args={[0.78, 0.9, 6]} />
             <meshStandardMaterial
-              color="#00F0FF"
-              emissive="#00F0FF"
-              emissiveIntensity={2.4}
+              color="#38BDF8"
+              emissive="#38BDF8"
+              emissiveIntensity={1.5}
               toneMapped={false}
               side={THREE.DoubleSide}
             />
           </mesh>
         )}
 
-        {/* Corrupted warning ring */}
+        {/* Corrupted / leaked warning ring */}
         {(node.corrupted || node.leaked) && (
           <mesh ref={warnRingRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.1, 0]}>
-            <ringGeometry args={[0.76, 0.88, 6]} />
+            <ringGeometry args={[0.76, 0.87, 6]} />
             <meshStandardMaterial
-              color="#FF2A5F"
-              emissive="#FF2A5F"
-              emissiveIntensity={2.2}
+              color="#FB7185"
+              emissive="#FB7185"
+              emissiveIntensity={1.45}
               toneMapped={false}
               side={THREE.DoubleSide}
             />
@@ -283,9 +346,9 @@ function HexNode({
             position={[0, 1.32, 0]}
             scale={0.38}
             fontSize={34}
-            color="#00FF9D"
-            background="rgba(4, 24, 18, 0.92)"
-            borderColor="#00FF9D"
+            color="#34D399"
+            background="rgba(11, 24, 24, 0.9)"
+            borderColor="#34D399"
           />
         )}
 
@@ -294,21 +357,21 @@ function HexNode({
           const lower = cursorName.toLowerCase();
           const cColor =
             lower === 'fast'
-              ? '#A855F7'
+              ? '#A78BFA'
               : lower === 'prev'
-                ? '#FFB800'
+                ? '#FBBF24'
                 : lower === 'slow' || lower === 'curr'
-                  ? '#00F0FF'
-                  : '#38BDF8';
+                  ? '#38BDF8'
+                  : '#2DD4BF';
           const yOff = (isHead ? 1.88 : 1.32) + idx * 0.52;
           return (
             <group key={cursorName}>
               <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.34 + idx * 0.14, 0]}>
-                <ringGeometry args={[0.7 + idx * 0.1, 0.77 + idx * 0.1, 24]} />
+                <ringGeometry args={[0.7 + idx * 0.1, 0.76 + idx * 0.1, 24]} />
                 <meshStandardMaterial
                   color={cColor}
                   emissive={cColor}
-                  emissiveIntensity={2.0}
+                  emissiveIntensity={1.3}
                   toneMapped={false}
                   side={THREE.DoubleSide}
                 />
@@ -455,10 +518,10 @@ export function LinkedListScene3D({
         const isSelfLoop = node.id === target.id;
         const isCycleOrBack = target.pos[0] <= node.pos[0] || Boolean(state.hasCycle && target.pos[0] < node.pos[0]);
         const conduitColor = node.leaked
-          ? '#FF2A5F'
+          ? '#FB7185'
           : isCycleOrBack || isSelfLoop
-            ? '#FFB800'
-            : '#00F0FF';
+            ? '#FBBF24'
+            : '#38BDF8';
 
         return (
           <EnergyConduit
@@ -480,11 +543,11 @@ export function LinkedListScene3D({
           isSelfLoop={false}
           isCycleOrBack={false}
           isPreview
-          color="#00F0FF"
+          color="#38BDF8"
         />
       )}
 
-      {/* Floating Glowing NULL Ground Pad */}
+      {/* Refined Multi-Tiered NULL Docking Pad */}
       <group
         position={nullPadPos}
         onClick={handleNullClick}
@@ -503,21 +566,33 @@ export function LinkedListScene3D({
           document.body.style.cursor = 'auto';
         }}
       >
-        <mesh position={[0, 0.1, 0]}>
-          <cylinderGeometry args={[0.72, 0.82, 0.16, 6]} />
+        {/* Outer metallic hex foundation */}
+        <mesh position={[0, 0.08, 0]} receiveShadow>
+          <cylinderGeometry args={[0.76, 0.88, 0.16, 6]} />
           <meshStandardMaterial
-            color={rewireFromId && nullHovered ? '#2A1238' : '#121526'}
-            emissive={rewireFromId ? '#A855F7' : '#475569'}
-            emissiveIntensity={rewireFromId && nullHovered ? 2.0 : rewireFromId ? 1.1 : 0.35}
-            toneMapped={false}
+            color={rewireFromId && nullHovered ? '#251D3D' : '#141D31'}
+            roughness={0.4}
+            metalness={0.68}
           />
         </mesh>
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.2, 0]}>
-          <ringGeometry args={[0.68, 0.82, 6]} />
+        {/* Recessed inner docking socket */}
+        <mesh position={[0, 0.17, 0]}>
+          <cylinderGeometry args={[0.52, 0.56, 0.04, 6]} />
           <meshStandardMaterial
-            color={rewireFromId ? '#A855F7' : '#64748B'}
-            emissive={rewireFromId ? '#A855F7' : '#64748B'}
-            emissiveIntensity={rewireFromId ? 1.9 : 0.6}
+            color="#0D1424"
+            emissive={rewireFromId ? '#A78BFA' : '#475569'}
+            emissiveIntensity={rewireFromId && nullHovered ? 1.1 : rewireFromId ? 0.55 : 0.18}
+            roughness={0.35}
+            metalness={0.5}
+          />
+        </mesh>
+        {/* Luminous docking collar ring */}
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.175, 0]}>
+          <ringGeometry args={[0.64, 0.75, 6]} />
+          <meshStandardMaterial
+            color={rewireFromId ? '#A78BFA' : '#64748B'}
+            emissive={rewireFromId ? '#A78BFA' : '#64748B'}
+            emissiveIntensity={rewireFromId && nullHovered ? 1.5 : rewireFromId ? 1.2 : 0.45}
             toneMapped={false}
             side={THREE.DoubleSide}
           />
@@ -527,8 +602,8 @@ export function LinkedListScene3D({
           position={[0, 0.85, 0]}
           scale={0.42}
           fontSize={38}
-          color={rewireFromId ? '#E9D5FF' : '#94A3B8'}
-          borderColor={rewireFromId ? '#A855F7' : '#475569'}
+          color={rewireFromId ? '#DDD6FE' : '#94A3B8'}
+          borderColor={rewireFromId ? '#A78BFA' : '#475569'}
         />
       </group>
     </group>

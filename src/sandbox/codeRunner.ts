@@ -5,10 +5,13 @@ import type {
   CodeExecutionResult,
   LevelDefinition,
   LinkedListWorldState,
+  PathfindingAlgorithm,
   PathfindingWorldState,
   SimEvent,
   SimMetrics,
   StacksQueuesWorldState,
+  TreesWorldState,
+  TreeTraversalOrder,
 } from '../engine/types';
 import {
   cloneWorldState,
@@ -16,6 +19,7 @@ import {
   createLinkedListSession,
   createPathfindingSession,
   createStacksQueuesSession,
+  createTreesSession,
   evaluateLevel,
 } from '../engine/worlds';
 
@@ -80,6 +84,7 @@ function buildGuardedSession<TState extends AnyWorldState>(
           return session.length;
         },
         get: guard((i: number) => session.get(i)),
+        probe: guard((i: number) => session.probe(i)),
         compare: guard((i: number, j: number) => session.compare(i, j)),
         swap: guard((i: number, j: number) => session.swap(i, j)),
         setPointer: guard((name: string, idx: number) =>
@@ -164,7 +169,7 @@ function buildGuardedSession<TState extends AnyWorldState>(
         initialState as PathfindingWorldState
       );
       const api: Record<string, unknown> = {
-        setAlgorithm: guard((algo: 'bfs' | 'dijkstra' | 'astar') =>
+        setAlgorithm: guard((algo: PathfindingAlgorithm) =>
           session.setAlgorithm(algo)
         ),
         setWall: guard((x: number, y: number, isWall: boolean) =>
@@ -177,6 +182,40 @@ function buildGuardedSession<TState extends AnyWorldState>(
         setGoal: guard((x: number, y: number) => session.setGoal(x, y)),
         runSearch: guard(() => session.runSearch()),
         compareAllAlgorithms: guard(() => session.compareAllAlgorithms()),
+      };
+      return {
+        api,
+        getState: () => session.getState() as TState,
+        getEvents: () => session.getEvents() as SimEvent<TState>[],
+        getMetrics: () => session.getMetrics(),
+      };
+    }
+
+    case 'trees': {
+      const session = createTreesSession(initialState as TreesWorldState);
+      const api: Record<string, unknown> = {
+        root: guard(() => session.root()),
+        getNode: guard((id: string) => session.getNode(id)),
+        getBalanceFactor: guard((id: string) => session.getBalanceFactor(id)),
+        pendingQueue: guard(() => session.pendingQueue()),
+        selectNode: guard((id: string | null) => session.selectNode(id)),
+        probe: guard((id: string) => session.probe(id)),
+        insert: guard((value: number) => session.insert(value)),
+        insertAt: guard(
+          (
+            parentId: string | null,
+            side: 'left' | 'right',
+            value?: number
+          ) => session.insertAt(parentId, side, value)
+        ),
+        deleteNode: guard((id: string) => session.deleteNode(id)),
+        rotateLeft: guard((id: string) => session.rotateLeft(id)),
+        rotateRight: guard((id: string) => session.rotateRight(id)),
+        runTraversal: guard((order: TreeTraversalOrder) =>
+          session.runTraversal(order)
+        ),
+        visitNode: guard((id: string) => session.visitNode(id)),
+        autoBalance: guard(() => session.autoBalance()),
       };
       return {
         api,
