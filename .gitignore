@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+
+# Build & Vite
+dist/
+.vite/
+
+# Test coverage
+coverage/
+
+# Environment variables
+.env
+.env.*
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+.vscode/
