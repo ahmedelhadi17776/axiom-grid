@@ -307,6 +307,7 @@ export interface GameStoreState {
   triggerResetCamera: () => void;
   setPathPaintTool: (tool: PathPaintTool) => void;
   dismissVictoryModal: () => void;
+  reopenVictoryModal: () => void;
   clearToast: () => void;
   toggleAudioMute: () => void;
   toggleAmbient: () => void;
@@ -760,9 +761,16 @@ export const useGameStore = create<GameStoreState>()(
 
       playTimeline: () => {
         soundEngine.playSelect();
-        set((s) => ({
-          timeline: setTimelinePlaying(s.timeline, true),
-        }));
+        set((s) => {
+          const atEnd =
+            s.timeline.events.length > 0 &&
+            s.timeline.cursor >= s.timeline.events.length - 1;
+          const baseTimeline = atEnd ? resetTimeline(s.timeline) : s.timeline;
+          return {
+            timeline: setTimelinePlaying(baseTimeline, true),
+            ...(atEnd ? { metrics: createEmptyMetrics() } : {}),
+          };
+        });
       },
 
       pauseTimeline: () => {
@@ -946,7 +954,15 @@ export const useGameStore = create<GameStoreState>()(
         set({ pathPaintTool: tool });
       },
 
-      dismissVictoryModal: () => set({ victoryDismissed: true }),
+      dismissVictoryModal: () => {
+        soundEngine.playSelect();
+        set({ victoryDismissed: true });
+      },
+
+      reopenVictoryModal: () => {
+        soundEngine.playSelect();
+        set({ victoryDismissed: false });
+      },
 
       clearToast: () => set({ statusToast: null }),
 

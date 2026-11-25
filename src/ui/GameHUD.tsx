@@ -2,6 +2,8 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft,
+  ArrowRight,
+  Award,
   Camera,
   CheckCircle2,
   ChevronLeft,
@@ -17,13 +19,14 @@ import {
   SkipBack,
   SkipForward,
   Sparkles,
+  Star,
   StepBack,
   Volume2,
   VolumeX,
   X,
 } from 'lucide-react';
 import { useGameStore, type PathPaintTool } from '../store/useGameStore';
-import { getLevelById } from '../levels/index';
+import { getLevelById, getNextLevel } from '../levels/index';
 import { getActiveEvent, getCurrentState } from '../engine/timeline';
 import type { PathfindingAlgorithm, PlaybackSpeed } from '../engine/types';
 
@@ -40,8 +43,12 @@ export const GameHUD: React.FC = () => {
   const graphicsQuality = useGameStore((s) => s.graphicsQuality);
   const pathPaintTool = useGameStore((s) => s.pathPaintTool);
   const statusToast = useGameStore((s) => s.statusToast);
+  const scoreReport = useGameStore((s) => s.scoreReport);
+  const victoryDismissed = useGameStore((s) => s.victoryDismissed);
 
   const goToHub = useGameStore((s) => s.goToHub);
+  const startLevel = useGameStore((s) => s.startLevel);
+  const reopenVictoryModal = useGameStore((s) => s.reopenVictoryModal);
   const resetLevel = useGameStore((s) => s.resetLevel);
   const validateCurrentLevel = useGameStore((s) => s.validateCurrentLevel);
   const setCodeDrawerOpen = useGameStore((s) => s.setCodeDrawerOpen);
@@ -65,6 +72,8 @@ export const GameHUD: React.FC = () => {
   const level = getLevelById(activeLevelId);
   if (!level) return null;
 
+  const nextLevel = getNextLevel(activeLevelId);
+  const showWonBanner = Boolean(scoreReport?.passed && victoryDismissed);
   const currentState = getCurrentState(timeline);
   const activeEvent = getActiveEvent(timeline);
   const totalEvents = timeline.events.length;
@@ -528,6 +537,79 @@ export const GameHUD: React.FC = () => {
       </footer>
     </div>
 
+    {/* FLOATING VICTORY INSPECTION BANNER (when VictoryModal is dismissed in won state) */}
+    <AnimatePresence>
+      {showWonBanner && scoreReport && (
+        <motion.div
+          initial={{ y: -14, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: -14, opacity: 0 }}
+          className="glass-panel glow-emerald pointer-events-auto fixed left-1/2 top-[70px] z-30 flex max-w-[94vw] -translate-x-1/2 flex-wrap items-center justify-center gap-2 rounded-full border-emerald-400/55 bg-emerald-950/85 px-3.5 py-1.5 text-xs font-mono shadow-lg backdrop-blur-md"
+        >
+          <div className="flex items-center gap-2">
+            <span className="flex items-center gap-1 font-bold tracking-wider text-neon-emerald">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              <span>CIRCUIT VERIFIED</span>
+            </span>
+
+            {scoreReport.rank && (
+              <span className="rounded-md border border-emerald-400/50 bg-emerald-500/20 px-1.5 py-0.5 text-[11px] font-black text-emerald-100">
+                RANK {scoreReport.rank}
+              </span>
+            )}
+
+            <div className="flex items-center gap-0.5">
+              {[1, 2, 3].map((n) => (
+                <Star
+                  key={n}
+                  className={`h-3.5 w-3.5 ${
+                    scoreReport.stars >= n
+                      ? 'fill-neon-amber text-neon-amber'
+                      : 'text-slate-600'
+                  }`}
+                />
+              ))}
+            </div>
+          </div>
+
+          <div className="hidden h-4 w-px bg-emerald-500/30 sm:block" />
+
+          <div className="flex items-center gap-1.5">
+            {totalEvents > 0 && (
+              <button
+                onClick={() => {
+                  rewindTimeline();
+                  playTimeline();
+                }}
+                className="flex items-center gap-1 rounded-full border border-cyan-400/50 bg-cyan-500/15 px-2.5 py-1 text-[11px] font-semibold text-cyan-100 transition hover:bg-cyan-500/30"
+              >
+                <Play className="h-3 w-3 fill-cyan-300 text-cyan-300" />
+                <span>REPLAY</span>
+              </button>
+            )}
+
+            <button
+              onClick={reopenVictoryModal}
+              className="flex items-center gap-1 rounded-full border border-emerald-400/45 bg-emerald-500/15 px-2.5 py-1 text-[11px] font-semibold text-emerald-100 transition hover:bg-emerald-500/30"
+            >
+              <Award className="h-3 w-3 text-neon-emerald" />
+              <span>RESULTS</span>
+            </button>
+
+            {nextLevel && (
+              <button
+                onClick={() => startLevel(nextLevel.id)}
+                className="flex items-center gap-1 rounded-full border border-emerald-300/70 bg-emerald-500/30 px-3 py-1 text-[11px] font-bold text-white transition hover:bg-emerald-400/40"
+              >
+                <span>NEXT: {nextLevel.code}</span>
+                <ArrowRight className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+
     {/* FLOATING STATUS TOAST (Root stacking context z-40 above side panels) */}
     <AnimatePresence>
       {statusToast && (
@@ -535,7 +617,9 @@ export const GameHUD: React.FC = () => {
           initial={{ y: -12, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: -12, opacity: 0 }}
-          className={`pointer-events-auto fixed left-1/2 top-[74px] z-40 flex max-w-xl -translate-x-1/2 items-center gap-2.5 rounded-full border px-4 py-1.5 text-xs font-mono shadow-lg backdrop-blur-md ${
+          className={`pointer-events-auto fixed left-1/2 ${
+            showWonBanner ? 'top-[124px]' : 'top-[74px]'
+          } z-40 flex max-w-xl -translate-x-1/2 items-center gap-2.5 rounded-full border px-4 py-1.5 text-xs font-mono shadow-lg backdrop-blur-md ${
             statusToast.tone === 'error'
               ? 'border-rose-500/60 bg-rose-950/92 text-rose-100'
               : statusToast.tone === 'success'
