@@ -1,8 +1,10 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
+  ArrowDown,
   ArrowLeft,
   ArrowRight,
+  ArrowUp,
   Award,
   Camera,
   CheckCircle2,
@@ -11,13 +13,18 @@ import {
   Code2,
   Cpu,
   FileCode2,
+  GitMerge,
+  Layers,
   Lightbulb,
   Music,
   Pause,
   Play,
+  Plus,
   Radar,
+  RefreshCw,
   RotateCcw,
   RotateCw,
+  Search,
   SkipBack,
   SkipForward,
   Sparkles,
@@ -508,6 +515,339 @@ export const GameHUD: React.FC = () => {
           </div>
         );
       }
+    }
+
+    if (currentState.world === 'dp') {
+      return (
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 rounded-lg border border-indigo-400/35 bg-indigo-500/12 px-2.5 py-1.5 text-xs font-mono text-indigo-100">
+            <span className="font-bold text-neon-indigo">
+              TARGET: {currentState.targetAnswer}
+            </span>
+            {currentState.naiveRecursionOps !== undefined && (
+              <>
+                <span className="text-slate-500">•</span>
+                <span className="text-[11px] text-slate-300">
+                  NAIVE O(2^n): <strong className="text-amber-200">{currentState.naiveRecursionOps}</strong>
+                </span>
+              </>
+            )}
+          </div>
+          <span className="hidden text-xs font-mono text-slate-400 xl:inline">
+            Click glowing indigo cells to compute
+          </span>
+          <button
+            onClick={() =>
+              handleDirectAction({
+                world: 'dp',
+                type: 'TRACE_OPTIMAL',
+              })
+            }
+            className="glow-indigo flex items-center gap-1.5 rounded-lg border border-indigo-400/45 bg-indigo-500/18 px-3 py-1.5 text-xs font-mono font-semibold text-indigo-100 transition hover:bg-indigo-500/28"
+          >
+            <GitMerge className="h-3.5 w-3.5 text-neon-indigo" />
+            <span>TRACE OPTIMAL</span>
+          </button>
+        </div>
+      );
+    }
+
+    if (currentState.world === 'hash-table') {
+      const nextPending = currentState.pendingKeys[0];
+      const occupiedCount = currentState.buckets.reduce(
+        (acc, b) => acc + (b.entry ? 1 : 0) + b.chain.length,
+        0
+      );
+      const loadPct = Math.round((occupiedCount / Math.max(1, currentState.capacity)) * 100);
+      const isOverloaded = occupiedCount / Math.max(1, currentState.capacity) > currentState.loadFactorThreshold;
+
+      // For tombstone mode: find occupied non-target keys so player can delete with tombstone
+      const deletableEntries =
+        currentState.mode === 'tombstone'
+          ? currentState.buckets
+              .filter((b) => b.entry && b.entry.key !== currentState.searchTarget)
+              .map((b) => b.entry!)
+          : [];
+
+      // For two-sum mode: check which array values aren't stored yet, and whether a complement pair is stored
+      const storedKeys = new Set<number>();
+      for (const b of currentState.buckets) {
+        if (b.entry) storedKeys.add(b.entry.key);
+        for (const e of b.chain) storedKeys.add(e.key);
+      }
+      const nextTwoSumKey =
+        currentState.mode === 'two-sum' && currentState.twoSumArray
+          ? currentState.twoSumArray.find((num) => !storedKeys.has(num))
+          : undefined;
+
+      let readyPair: [number, number] | null = null;
+      if (
+        currentState.mode === 'two-sum' &&
+        currentState.twoSumTarget !== undefined &&
+        !currentState.foundPair
+      ) {
+        for (const k of storedKeys) {
+          const comp = currentState.twoSumTarget - k;
+          if (comp !== k && storedKeys.has(comp)) {
+            readyPair = [k, comp];
+            break;
+          }
+        }
+      }
+
+      return (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {/* Load & Next Key Status */}
+          <div className="flex items-center gap-2 rounded-lg border border-orange-400/35 bg-orange-500/12 px-2.5 py-1.5 text-xs font-mono text-orange-100">
+            {nextPending ? (
+              <span>
+                NEXT: <strong className="text-neon-orange">{nextPending.key}</strong> → h=
+                {((nextPending.key % currentState.capacity) + currentState.capacity) %
+                  currentState.capacity}
+              </span>
+            ) : (
+              <span>
+                LOAD:{' '}
+                <strong className={isOverloaded ? 'text-neon-crimson' : 'text-neon-orange'}>
+                  {loadPct}%
+                </strong>
+              </span>
+            )}
+          </div>
+
+          {nextPending && (
+            <button
+              onClick={() =>
+                handleDirectAction({
+                  world: 'hash-table',
+                  type: 'INSERT',
+                  payload: { key: nextPending.key, value: nextPending.value },
+                })
+              }
+              className="flex items-center gap-1 rounded-lg border border-orange-400/45 bg-orange-500/18 px-2.5 py-1.5 text-[11px] font-mono font-semibold text-orange-100 transition hover:bg-orange-500/28"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span>INSERT {nextPending.key}</span>
+            </button>
+          )}
+
+          {currentState.mode === 'tombstone' &&
+            deletableEntries.slice(0, 2).map((entry) => (
+              <button
+                key={entry.key}
+                onClick={() =>
+                  handleDirectAction({
+                    world: 'hash-table',
+                    type: 'REMOVE',
+                    payload: { key: entry.key, useTombstone: true },
+                  })
+                }
+                className="flex items-center gap-1 rounded-lg border border-amber-400/40 bg-amber-500/14 px-2.5 py-1.5 text-[11px] font-mono font-semibold text-amber-200 transition hover:bg-amber-500/24"
+              >
+                <Trash2 className="h-3 w-3" />
+                <span>DEL {entry.key} (TOMB)</span>
+              </button>
+            ))}
+
+          {currentState.searchTarget !== undefined && (
+            <button
+              onClick={() =>
+                handleDirectAction({
+                  world: 'hash-table',
+                  type: 'LOOKUP',
+                  payload: { key: currentState.searchTarget },
+                })
+              }
+              className="flex items-center gap-1 rounded-lg border border-sky-400/45 bg-sky-500/16 px-2.5 py-1.5 text-[11px] font-mono font-semibold text-sky-100 transition hover:bg-sky-500/26"
+            >
+              <Search className="h-3.5 w-3.5 text-neon-cyan" />
+              <span>LOOKUP {currentState.searchTarget}</span>
+            </button>
+          )}
+
+          {(currentState.mode === 'rehash' || isOverloaded) && (
+            <button
+              onClick={() =>
+                handleDirectAction({
+                  world: 'hash-table',
+                  type: 'REHASH',
+                })
+              }
+              className="glow-orange flex items-center gap-1 rounded-lg border border-orange-400/50 bg-orange-500/20 px-2.5 py-1.5 text-[11px] font-mono font-bold text-orange-100 transition hover:bg-orange-500/30"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              <span>REHASH 2x</span>
+            </button>
+          )}
+
+          {currentState.mode === 'two-sum' && (
+            <>
+              {nextTwoSumKey !== undefined && !readyPair && (
+                <button
+                  onClick={() =>
+                    handleDirectAction({
+                      world: 'hash-table',
+                      type: 'INSERT',
+                      payload: { key: nextTwoSumKey, value: String(nextTwoSumKey) },
+                    })
+                  }
+                  className="flex items-center gap-1 rounded-lg border border-orange-400/45 bg-orange-500/18 px-2.5 py-1.5 text-[11px] font-mono font-semibold text-orange-100 transition hover:bg-orange-500/28"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>HASH {nextTwoSumKey}</span>
+                </button>
+              )}
+              {readyPair && (
+                <button
+                  onClick={() =>
+                    handleDirectAction({
+                      world: 'hash-table',
+                      type: 'MARK_PAIR',
+                      payload: { a: readyPair![0], b: readyPair![1] },
+                    })
+                  }
+                  className="glow-emerald flex items-center gap-1 rounded-lg border border-emerald-400/50 bg-emerald-500/20 px-3 py-1.5 text-[11px] font-mono font-bold text-emerald-100 transition hover:bg-emerald-500/30"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5 text-neon-emerald" />
+                  <span>
+                    SOLVE PAIR ({readyPair[0]}+{readyPair[1]})
+                  </span>
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      );
+    }
+
+    if (currentState.world === 'heap') {
+      const nextVal = currentState.pendingQueue[0];
+      const hasSelected =
+        currentState.selectedIndex !== null &&
+        currentState.selectedIndex >= 0 &&
+        currentState.selectedIndex < currentState.items.length;
+
+      return (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="rounded-lg border border-pink-400/35 bg-pink-500/12 px-2.5 py-1.5 text-[11px] font-mono font-bold text-neon-rose">
+            {currentState.mode === 'median'
+              ? 'TWIN SPIRES'
+              : currentState.kind === 'min'
+                ? 'MIN-HEAP'
+                : 'MAX-HEAP'}
+          </span>
+
+          {currentState.mode === 'median' ? (
+            <button
+              disabled={nextVal === undefined}
+              onClick={() =>
+                handleDirectAction({
+                  world: 'heap',
+                  type: 'INSERT_DUAL',
+                })
+              }
+              className="glow-rose flex items-center gap-1.5 rounded-lg border border-pink-400/50 bg-pink-500/20 px-3 py-1.5 text-xs font-mono font-bold text-pink-100 transition hover:bg-pink-500/30 disabled:opacity-40"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span>
+                {nextVal !== undefined
+                  ? `FEED ${nextVal} → TWIN SPIRES`
+                  : 'ALL FED'}
+              </span>
+            </button>
+          ) : (
+            <>
+              {nextVal !== undefined && (
+                <>
+                  <button
+                    onClick={() =>
+                      handleDirectAction({
+                        world: 'heap',
+                        type: 'INSERT',
+                      })
+                    }
+                    className="flex items-center gap-1 rounded-lg border border-pink-400/45 bg-pink-500/18 px-2.5 py-1.5 text-[11px] font-mono font-semibold text-pink-100 transition hover:bg-pink-500/28"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>INSERT {nextVal}</span>
+                  </button>
+                  <button
+                    onClick={() =>
+                      handleDirectAction({
+                        world: 'heap',
+                        type: 'PUSH_RAW',
+                      })
+                    }
+                    className="rounded-lg border border-slate-700/60 bg-surface/85 px-2 py-1.5 text-[11px] font-mono text-slate-300 transition hover:border-pink-400/40 hover:text-pink-200"
+                  >
+                    PUSH RAW
+                  </button>
+                </>
+              )}
+
+              <button
+                disabled={currentState.items.length === 0}
+                onClick={() =>
+                  handleDirectAction({
+                    world: 'heap',
+                    type: 'EXTRACT_ROOT',
+                  })
+                }
+                className="flex items-center gap-1 rounded-lg border border-emerald-400/40 bg-emerald-500/15 px-2.5 py-1.5 text-[11px] font-mono font-semibold text-emerald-100 transition hover:bg-emerald-500/25 disabled:opacity-35"
+              >
+                <ArrowUp className="h-3.5 w-3.5 text-neon-emerald" />
+                <span>EXTRACT ROOT</span>
+              </button>
+
+              {hasSelected && (
+                <>
+                  <button
+                    onClick={() =>
+                      handleDirectAction({
+                        world: 'heap',
+                        type: 'SIFT_UP',
+                        payload: { index: currentState.selectedIndex },
+                      })
+                    }
+                    className="flex items-center gap-1 rounded-lg border border-sky-400/40 bg-sky-500/15 px-2 py-1.5 text-[11px] font-mono text-sky-100 transition hover:bg-sky-500/25"
+                  >
+                    <ArrowUp className="h-3 w-3" />
+                    <span>SIFT UP</span>
+                  </button>
+                  <button
+                    onClick={() =>
+                      handleDirectAction({
+                        world: 'heap',
+                        type: 'SIFT_DOWN',
+                        payload: { index: currentState.selectedIndex },
+                      })
+                    }
+                    className="flex items-center gap-1 rounded-lg border border-violet-400/40 bg-violet-500/15 px-2 py-1.5 text-[11px] font-mono text-violet-100 transition hover:bg-violet-500/25"
+                  >
+                    <ArrowDown className="h-3 w-3" />
+                    <span>SIFT DOWN</span>
+                  </button>
+                </>
+              )}
+
+              {(currentState.mode === 'heapify' || currentState.mode === 'heapsort') && (
+                <button
+                  onClick={() =>
+                    handleDirectAction({
+                      world: 'heap',
+                      type: 'HEAPIFY',
+                    })
+                  }
+                  className="glow-rose flex items-center gap-1 rounded-lg border border-pink-400/50 bg-pink-500/20 px-2.5 py-1.5 text-[11px] font-mono font-bold text-pink-100 transition hover:bg-pink-500/30"
+                >
+                  <Layers className="h-3.5 w-3.5" />
+                  <span>HEAPIFY</span>
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      );
     }
 
     return null;

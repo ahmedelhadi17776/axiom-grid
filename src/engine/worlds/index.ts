@@ -2,6 +2,10 @@ import { accumulateMetrics, createEmptyMetrics } from '../scorer';
 import type {
   AnyWorldState,
   ArraysWorldState,
+  DPWorldState,
+  HashResolutionStrategy,
+  HashTableWorldState,
+  HeapWorldState,
   LevelDefinition,
   LinkedListWorldState,
   PathfindingAlgorithm,
@@ -19,6 +23,21 @@ import {
   createArraysSession,
   evaluateArraysLevel,
 } from './arraysEngine';
+import {
+  cloneDPState,
+  createDPSession,
+  evaluateDPLevel,
+} from './dpEngine';
+import {
+  cloneHashTableState,
+  createHashTableSession,
+  evaluateHashTableLevel,
+} from './hashTableEngine';
+import {
+  cloneHeapState,
+  createHeapSession,
+  evaluateHeapLevel,
+} from './heapEngine';
 import {
   cloneLinkedListState,
   createLinkedListSession,
@@ -45,6 +64,9 @@ export * from './linkedListEngine';
 export * from './stacksQueuesEngine';
 export * from './pathfindingEngine';
 export * from './treesEngine';
+export * from './dpEngine';
+export * from './hashTableEngine';
+export * from './heapEngine';
 
 const VALID_PATHFINDING_ALGORITHMS = new Set<PathfindingAlgorithm>([
   'bfs',
@@ -74,6 +96,12 @@ export function cloneWorldState<T extends AnyWorldState>(state: T): T {
       return clonePathfindingState(state) as T;
     case 'trees':
       return cloneTreesState(state) as T;
+    case 'dp':
+      return cloneDPState(state) as T;
+    case 'hash-table':
+      return cloneHashTableState(state) as T;
+    case 'heap':
+      return cloneHeapState(state) as T;
   }
 }
 
@@ -110,6 +138,24 @@ export function evaluateLevel(
     case 'trees':
       return evaluateTreesLevel(
         level as LevelDefinition<TreesWorldState>,
+        state,
+        metrics
+      );
+    case 'dp':
+      return evaluateDPLevel(
+        level as LevelDefinition<DPWorldState>,
+        state,
+        metrics
+      );
+    case 'hash-table':
+      return evaluateHashTableLevel(
+        level as LevelDefinition<HashTableWorldState>,
+        state,
+        metrics
+      );
+    case 'heap':
+      return evaluateHeapLevel(
+        level as LevelDefinition<HeapWorldState>,
         state,
         metrics
       );
@@ -430,6 +476,166 @@ export function applyDirectAction(
       }
       case 'AUTO_BALANCE': {
         session.autoBalance();
+        break;
+      }
+      default:
+        break;
+    }
+
+    const delta = session.getMetrics();
+    return {
+      state: session.getState(),
+      events: session.getEvents(),
+      metrics: accumulateMetrics(baseMetrics, delta),
+    };
+  }
+
+  if (state.world === 'dp' && action.world === 'dp') {
+    const session = createDPSession(state);
+    switch (action.type) {
+      case 'COMPUTE_CELL': {
+        session.computeCell(Number(payload.row), Number(payload.col));
+        break;
+      }
+      case 'SET_CELL': {
+        const deps = Array.isArray(payload.deps)
+          ? (payload.deps as [number, number][])
+          : undefined;
+        session.set(
+          Number(payload.row),
+          Number(payload.col),
+          Number(payload.value),
+          deps
+        );
+        break;
+      }
+      case 'TRACE_OPTIMAL': {
+        session.traceOptimal();
+        break;
+      }
+      case 'RUN_TABULATION': {
+        session.runTabulation();
+        break;
+      }
+      default:
+        break;
+    }
+
+    const delta = session.getMetrics();
+    return {
+      state: session.getState(),
+      events: session.getEvents(),
+      metrics: accumulateMetrics(baseMetrics, delta),
+    };
+  }
+
+  if (state.world === 'hash-table' && action.world === 'hash-table') {
+    const session = createHashTableSession(state);
+    switch (action.type) {
+      case 'INSERT_AT_BUCKET': {
+        session.insertAtBucket(Number(payload.bucketIndex));
+        break;
+      }
+      case 'INSERT': {
+        const key = Number(payload.key);
+        const value =
+          payload.value !== undefined ? String(payload.value) : undefined;
+        session.insert(key, value);
+        break;
+      }
+      case 'LOOKUP': {
+        session.lookup(Number(payload.key));
+        break;
+      }
+      case 'REMOVE': {
+        const key = Number(payload.key);
+        const useTombstone =
+          payload.useTombstone !== undefined
+            ? Boolean(payload.useTombstone)
+            : undefined;
+        session.remove(key, useTombstone);
+        break;
+      }
+      case 'REHASH': {
+        const newCap =
+          payload.newCapacity !== undefined
+            ? Number(payload.newCapacity)
+            : undefined;
+        session.rehash(newCap);
+        break;
+      }
+      case 'SET_STRATEGY': {
+        const strategy = String(
+          payload.strategy ?? 'linear'
+        ) as HashResolutionStrategy;
+        if (strategy === 'linear' || strategy === 'chaining') {
+          session.setStrategy(strategy);
+        }
+        break;
+      }
+      case 'MARK_PAIR': {
+        session.markPair(Number(payload.a), Number(payload.b));
+        break;
+      }
+      default:
+        break;
+    }
+
+    const delta = session.getMetrics();
+    return {
+      state: session.getState(),
+      events: session.getEvents(),
+      metrics: accumulateMetrics(baseMetrics, delta),
+    };
+  }
+
+  if (state.world === 'heap' && action.world === 'heap') {
+    const session = createHeapSession(state);
+    switch (action.type) {
+      case 'SWAP': {
+        session.swap(Number(payload.i), Number(payload.j));
+        break;
+      }
+      case 'SELECT': {
+        const index =
+          payload.index === null || payload.index === undefined
+            ? null
+            : Number(payload.index);
+        session.select(index);
+        break;
+      }
+      case 'INSERT': {
+        const value =
+          payload.value !== undefined ? Number(payload.value) : undefined;
+        session.insert(value);
+        break;
+      }
+      case 'PUSH_RAW': {
+        const value =
+          payload.value !== undefined ? Number(payload.value) : undefined;
+        session.pushRaw(value);
+        break;
+      }
+      case 'EXTRACT_ROOT': {
+        session.extractRoot();
+        break;
+      }
+      case 'SIFT_UP': {
+        session.siftUp(Number(payload.index));
+        break;
+      }
+      case 'SIFT_DOWN': {
+        session.siftDown(Number(payload.index));
+        break;
+      }
+      case 'HEAPIFY': {
+        session.heapify();
+        break;
+      }
+      case 'INSERT_DUAL': {
+        const value =
+          payload.value !== undefined ? Number(payload.value) : undefined;
+        session.insertDual(value);
         break;
       }
       default:

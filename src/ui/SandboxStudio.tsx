@@ -1,11 +1,15 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
+  ArrowDown,
   ArrowLeft,
+  ArrowUp,
   BarChart3,
   Camera,
   Code2,
   FlaskConical,
+  GitMerge,
+  Layers,
   Pause,
   Play,
   Plus,
@@ -80,6 +84,13 @@ export const SandboxStudio: React.FC = () => {
   const sandboxInsertTreeKey = useGameStore((s) => s.sandboxInsertTreeKey);
   const sandboxRunTreeTraversal = useGameStore((s) => s.sandboxRunTreeTraversal);
   const sandboxAutoBalanceTree = useGameStore((s) => s.sandboxAutoBalanceTree);
+  const sandboxRunDPTabulation = useGameStore((s) => s.sandboxRunDPTabulation);
+  const sandboxHashInsert = useGameStore((s) => s.sandboxHashInsert);
+  const sandboxHashRehash = useGameStore((s) => s.sandboxHashRehash);
+  const sandboxHashToggleStrategy = useGameStore((s) => s.sandboxHashToggleStrategy);
+  const sandboxHeapInsert = useGameStore((s) => s.sandboxHeapInsert);
+  const sandboxHeapExtract = useGameStore((s) => s.sandboxHeapExtract);
+  const sandboxHeapHeapify = useGameStore((s) => s.sandboxHeapHeapify);
   const handleDirectAction = useGameStore((s) => s.handleDirectAction);
   const runPathfindingSearch = useGameStore((s) => s.runPathfindingSearch);
   const comparePathfindingAlgorithms = useGameStore((s) => s.comparePathfindingAlgorithms);
@@ -100,6 +111,8 @@ export const SandboxStudio: React.FC = () => {
   const [presetName, setPresetName] = useState('');
   const [presetsOpen, setPresetsOpen] = useState(false);
   const [treeKeyInput, setTreeKeyInput] = useState('');
+  const [hashKeyInput, setHashKeyInput] = useState('');
+  const [heapValInput, setHeapValInput] = useState('');
 
   const currentState = getCurrentState(timeline);
   const activeEvent = getActiveEvent(timeline);
@@ -123,6 +136,22 @@ export const SandboxStudio: React.FC = () => {
     const parsed = trimmed === '' ? undefined : Number(trimmed);
     sandboxInsertTreeKey(parsed);
     setTreeKeyInput('');
+  };
+
+  const handleHashInsertSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = hashKeyInput.trim();
+    const parsed = trimmed === '' ? undefined : Number(trimmed);
+    sandboxHashInsert(parsed);
+    setHashKeyInput('');
+  };
+
+  const handleHeapInsertSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = heapValInput.trim();
+    const parsed = trimmed === '' ? undefined : Number(trimmed);
+    sandboxHeapInsert(parsed);
+    setHeapValInput('');
   };
 
   // Compute best cost and fewest visited among found benchmark rows
@@ -432,6 +461,150 @@ export const SandboxStudio: React.FC = () => {
       );
     }
 
+    if (currentState.world === 'dp') {
+      return (
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={sandboxRunDPTabulation}
+            className="glow-indigo flex items-center gap-1.5 rounded-lg border border-indigo-400/50 bg-indigo-500/20 px-3 py-1.5 text-[11px] font-mono font-bold text-indigo-100 transition hover:bg-indigo-500/30"
+          >
+            <Play className="h-3.5 w-3.5 fill-indigo-300 text-indigo-300" />
+            <span>RUN TABULATION</span>
+          </button>
+          <button
+            onClick={() =>
+              handleDirectAction({
+                world: 'dp',
+                type: 'TRACE_OPTIMAL',
+              })
+            }
+            className="flex items-center gap-1.5 rounded-lg border border-sky-400/40 bg-sky-500/14 px-3 py-1.5 text-[11px] font-mono font-semibold text-sky-100 transition hover:bg-sky-500/24"
+          >
+            <GitMerge className="h-3.5 w-3.5 text-neon-cyan" />
+            <span>TRACE OPTIMAL</span>
+          </button>
+        </div>
+      );
+    }
+
+    if (currentState.world === 'hash-table') {
+      return (
+        <div className="flex flex-wrap items-center gap-2">
+          <form onSubmit={handleHashInsertSubmit} className="flex items-center gap-1">
+            <input
+              type="number"
+              min={0}
+              max={999}
+              value={hashKeyInput}
+              onChange={(e) => setHashKeyInput(e.target.value)}
+              placeholder="Key"
+              className="w-16 rounded-lg border border-slate-700/60 bg-surface/90 px-2 py-1 text-xs font-mono text-slate-100 placeholder-slate-500 focus:border-orange-400/60 focus:outline-none"
+            />
+            <button
+              type="submit"
+              className="flex items-center gap-1 rounded-lg border border-orange-400/45 bg-orange-500/18 px-2.5 py-1.5 text-[11px] font-mono font-semibold text-orange-100 transition hover:bg-orange-500/28"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span>INSERT</span>
+            </button>
+          </form>
+
+          <button
+            onClick={sandboxHashToggleStrategy}
+            className="rounded-lg border border-slate-700/60 bg-surface/85 px-2.5 py-1.5 text-[11px] font-mono font-semibold text-amber-200 transition hover:border-orange-400/45"
+          >
+            MODE: {currentState.strategy === 'linear' ? 'LINEAR' : 'CHAINING'}
+          </button>
+
+          <button
+            onClick={sandboxHashRehash}
+            className="glow-orange flex items-center gap-1 rounded-lg border border-orange-400/50 bg-orange-500/20 px-3 py-1.5 text-[11px] font-mono font-bold text-orange-100 transition hover:bg-orange-500/30"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            <span>REHASH 2x</span>
+          </button>
+        </div>
+      );
+    }
+
+    if (currentState.world === 'heap') {
+      const hasSelected =
+        currentState.selectedIndex !== null &&
+        currentState.selectedIndex >= 0 &&
+        currentState.selectedIndex < currentState.items.length;
+
+      return (
+        <div className="flex flex-wrap items-center gap-2">
+          <form onSubmit={handleHeapInsertSubmit} className="flex items-center gap-1">
+            <input
+              type="number"
+              min={1}
+              max={99}
+              value={heapValInput}
+              onChange={(e) => setHeapValInput(e.target.value)}
+              placeholder="Val"
+              className="w-16 rounded-lg border border-slate-700/60 bg-surface/90 px-2 py-1 text-xs font-mono text-slate-100 placeholder-slate-500 focus:border-pink-400/60 focus:outline-none"
+            />
+            <button
+              type="submit"
+              className="flex items-center gap-1 rounded-lg border border-pink-400/45 bg-pink-500/18 px-2.5 py-1.5 text-[11px] font-mono font-semibold text-pink-100 transition hover:bg-pink-500/28"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span>INSERT</span>
+            </button>
+          </form>
+
+          <button
+            onClick={sandboxHeapExtract}
+            disabled={currentState.items.length === 0}
+            className="flex items-center gap-1 rounded-lg border border-emerald-400/40 bg-emerald-500/15 px-2.5 py-1.5 text-[11px] font-mono font-semibold text-emerald-100 transition hover:bg-emerald-500/25 disabled:opacity-35"
+          >
+            <ArrowUp className="h-3.5 w-3.5 text-neon-emerald" />
+            <span>EXTRACT</span>
+          </button>
+
+          <button
+            onClick={sandboxHeapHeapify}
+            className="glow-rose flex items-center gap-1 rounded-lg border border-pink-400/50 bg-pink-500/20 px-2.5 py-1.5 text-[11px] font-mono font-bold text-pink-100 transition hover:bg-pink-500/30"
+          >
+            <Layers className="h-3.5 w-3.5" />
+            <span>HEAPIFY</span>
+          </button>
+
+          {hasSelected && (
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() =>
+                  handleDirectAction({
+                    world: 'heap',
+                    type: 'SIFT_UP',
+                    payload: { index: currentState.selectedIndex },
+                  })
+                }
+                className="flex items-center gap-1 rounded-lg border border-sky-400/40 bg-sky-500/15 px-2 py-1.5 text-[11px] font-mono text-sky-100 transition hover:bg-sky-500/25"
+              >
+                <ArrowUp className="h-3 w-3" />
+                <span>SIFT UP</span>
+              </button>
+              <button
+                onClick={() =>
+                  handleDirectAction({
+                    world: 'heap',
+                    type: 'SIFT_DOWN',
+                    payload: { index: currentState.selectedIndex },
+                  })
+                }
+                className="flex items-center gap-1 rounded-lg border border-violet-400/40 bg-violet-500/15 px-2 py-1.5 text-[11px] font-mono text-violet-100 transition hover:bg-violet-500/25"
+              >
+                <ArrowDown className="h-3 w-3" />
+                <span>SIFT DOWN</span>
+              </button>
+            </div>
+          )}
+        </div>
+      );
+    }
+
     return null;
   };
 
@@ -455,20 +628,26 @@ export const SandboxStudio: React.FC = () => {
             </span>
           </div>
 
-          {/* 5 World Tabs */}
+          {/* 8 World Tabs */}
           <div className="flex flex-wrap items-center gap-1 rounded-xl border border-slate-700/60 bg-surface/80 p-0.5">
             {WORLD_META.map((w) => {
               const active = sandboxWorld === w.id;
+              const activeClass =
+                w.id === 'trees'
+                  ? 'bg-teal-500/22 font-bold text-teal-100'
+                  : w.id === 'dp'
+                    ? 'bg-indigo-500/24 font-bold text-indigo-100'
+                    : w.id === 'hash-table'
+                      ? 'bg-orange-500/22 font-bold text-orange-100'
+                      : w.id === 'heap'
+                        ? 'bg-pink-500/22 font-bold text-pink-100'
+                        : 'bg-sky-500/22 font-bold text-sky-100';
               return (
                 <button
                   key={w.id}
                   onClick={() => setSandboxWorld(w.id as WorldId)}
-                  className={`rounded-lg px-2.5 py-1 text-[11px] font-mono transition ${
-                    active
-                      ? w.id === 'trees'
-                        ? 'bg-teal-500/22 font-bold text-teal-100'
-                        : 'bg-sky-500/22 font-bold text-sky-100'
-                      : 'text-slate-400 hover:text-slate-200'
+                  className={`rounded-lg px-2 py-1 text-[11px] font-mono transition ${
+                    active ? activeClass : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
                   {w.name}

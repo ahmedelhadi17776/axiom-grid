@@ -3,6 +3,10 @@ import type {
   AnyWorldState,
   ArraysWorldState,
   CodeExecutionResult,
+  DPWorldState,
+  HashResolutionStrategy,
+  HashTableWorldState,
+  HeapWorldState,
   LevelDefinition,
   LinkedListWorldState,
   PathfindingAlgorithm,
@@ -16,6 +20,9 @@ import type {
 import {
   cloneWorldState,
   createArraysSession,
+  createDPSession,
+  createHashTableSession,
+  createHeapSession,
   createLinkedListSession,
   createPathfindingSession,
   createStacksQueuesSession,
@@ -216,6 +223,106 @@ function buildGuardedSession<TState extends AnyWorldState>(
         ),
         visitNode: guard((id: string) => session.visitNode(id)),
         autoBalance: guard(() => session.autoBalance()),
+      };
+      return {
+        api,
+        getState: () => session.getState() as TState,
+        getEvents: () => session.getEvents() as SimEvent<TState>[],
+        getMetrics: () => session.getMetrics(),
+      };
+    }
+
+    case 'dp': {
+      const session = createDPSession(initialState as DPWorldState);
+      const api: Record<string, unknown> = {
+        get rows() {
+          return session.rows;
+        },
+        get cols() {
+          return session.cols;
+        },
+        get: guard((row: number, col: number) => session.get(row, col)),
+        set: guard(
+          (
+            row: number,
+            col: number,
+            value: number,
+            deps?: [number, number][]
+          ) => session.set(row, col, value, deps)
+        ),
+        computeCell: guard((row: number, col: number) =>
+          session.computeCell(row, col)
+        ),
+        traceOptimal: guard(() => session.traceOptimal()),
+        runTabulation: guard(() => session.runTabulation()),
+      };
+      return {
+        api,
+        getState: () => session.getState() as TState,
+        getEvents: () => session.getEvents() as SimEvent<TState>[],
+        getMetrics: () => session.getMetrics(),
+      };
+    }
+
+    case 'hash-table': {
+      const session = createHashTableSession(
+        initialState as HashTableWorldState
+      );
+      const api: Record<string, unknown> = {
+        get capacity() {
+          return session.capacity;
+        },
+        get strategy() {
+          return session.strategy;
+        },
+        hash: guard((key: number) => session.hash(key)),
+        loadFactor: guard(() => session.loadFactor()),
+        pendingKeys: guard(() => session.pendingKeys()),
+        setStrategy: guard((strategy: HashResolutionStrategy) =>
+          session.setStrategy(strategy)
+        ),
+        insert: guard((key: number, value?: string) =>
+          session.insert(key, value)
+        ),
+        insertAtBucket: guard((bucketIndex: number) =>
+          session.insertAtBucket(bucketIndex)
+        ),
+        lookup: guard((key: number) => session.lookup(key)),
+        remove: guard((key: number, useTombstone?: boolean) =>
+          session.remove(key, useTombstone)
+        ),
+        rehash: guard((newCapacity?: number) => session.rehash(newCapacity)),
+        markPair: guard((a: number, b: number) => session.markPair(a, b)),
+      };
+      return {
+        api,
+        getState: () => session.getState() as TState,
+        getEvents: () => session.getEvents() as SimEvent<TState>[],
+        getMetrics: () => session.getMetrics(),
+      };
+    }
+
+    case 'heap': {
+      const session = createHeapSession(initialState as HeapWorldState);
+      const api: Record<string, unknown> = {
+        size: guard(() => session.size()),
+        peek: guard(() => session.peek()),
+        get: guard((i: number) => session.get(i)),
+        parent: guard((i: number) => session.parent(i)),
+        left: guard((i: number) => session.left(i)),
+        right: guard((i: number) => session.right(i)),
+        pendingQueue: guard(() => session.pendingQueue()),
+        extracted: guard(() => session.extracted()),
+        select: guard((index: number | null) => session.select(index)),
+        compare: guard((i: number, j: number) => session.compare(i, j)),
+        swap: guard((i: number, j: number) => session.swap(i, j)),
+        pushRaw: guard((value?: number) => session.pushRaw(value)),
+        siftUp: guard((index: number) => session.siftUp(index)),
+        siftDown: guard((index: number) => session.siftDown(index)),
+        insert: guard((value?: number) => session.insert(value)),
+        extractRoot: guard(() => session.extractRoot()),
+        heapify: guard(() => session.heapify()),
+        insertDual: guard((value?: number) => session.insertDual(value)),
       };
       return {
         api,

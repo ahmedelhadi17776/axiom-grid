@@ -1,15 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { ALL_LEVELS, getLevelById } from '../../levels';
 import { runPlayerCodeSync } from '../../sandbox/codeRunner';
-import type { PathfindingWorldState, TreesWorldState } from '../types';
+import type {
+  HashTableWorldState,
+  PathfindingWorldState,
+  TreesWorldState,
+} from '../types';
 
 describe('Curriculum levels (ALL_LEVELS)', () => {
-  it('contains all 30 handcrafted levels with unique IDs, codes, and progressive hints', () => {
-    expect(ALL_LEVELS).toHaveLength(30);
+  it('contains all 48 handcrafted levels with unique IDs, codes, and progressive hints', () => {
+    expect(ALL_LEVELS).toHaveLength(48);
     const ids = new Set(ALL_LEVELS.map((l) => l.id));
     const codes = new Set(ALL_LEVELS.map((l) => l.code));
-    expect(ids.size).toBe(30);
-    expect(codes.size).toBe(30);
+    expect(ids.size).toBe(48);
+    expect(codes.size).toBe(48);
 
     for (const level of ALL_LEVELS) {
       expect(Array.isArray(level.hints)).toBe(true);
@@ -136,7 +140,6 @@ describe('Curriculum negative / constraint tests', () => {
     const level52 = getLevelById('trees-2')!;
     expect(level52).toBeDefined();
 
-    // First pending key is 35; docking it on left of t2(25) violates 35 < 25
     const invalidInsertCode = `
       api.insertAt('t2', 'left', 35);
       while (api.pendingQueue().length > 0) {
@@ -161,5 +164,67 @@ describe('Curriculum negative / constraint tests', () => {
     expect(result.ok).toBe(true);
     expect(result.score?.passed).toBe(false);
     expect(result.score?.failureReason).toMatch(/imbalance|BF/i);
+  });
+
+  it('Level 6.1: leaving the DP memo table incomplete fails evaluation', () => {
+    const level61 = getLevelById('dp-1')!;
+    expect(level61).toBeDefined();
+
+    const partialCode = `
+      api.computeCell(0, 2);
+      api.computeCell(0, 3);
+    `;
+    const result = runPlayerCodeSync(level61, partialCode);
+    expect(result.ok).toBe(true);
+    expect(result.score?.passed).toBe(false);
+    expect(result.score?.failureReason).toMatch(/empty|subproblem/i);
+  });
+
+  it('Level 7.3: deleting 16 without a tombstone breaks lookup(23) and fails', () => {
+    const level73 = getLevelById('hash-table-3')!;
+    expect(level73).toBeDefined();
+
+    const hardDeleteCode = `
+      api.remove(16, false);
+      api.lookup(23);
+    `;
+    const result = runPlayerCodeSync(level73, hardDeleteCode);
+    expect(result.ok).toBe(true);
+    const finalState = result.finalState as HashTableWorldState;
+    expect(finalState.foundBucket).toBeNull();
+    expect(result.score?.passed).toBe(false);
+  });
+
+  it('Level 7.5: inserting keys without rehashing exceeds loadFactorThreshold and fails', () => {
+    const level75 = getLevelById('hash-table-5')!;
+    expect(level75).toBeDefined();
+
+    const noRehashCode = `
+      while (api.pendingKeys().length > 0) {
+        const next = api.pendingKeys()[0];
+        api.insert(next.key, next.value);
+      }
+    `;
+    const result = runPlayerCodeSync(level75, noRehashCode);
+    expect(result.ok).toBe(true);
+    const finalState = result.finalState as HashTableWorldState;
+    expect(finalState.rehashCount).toBe(0);
+    expect(result.score?.passed).toBe(false);
+    expect(result.score?.failureReason).toMatch(/load|rehash/i);
+  });
+
+  it('Level 8.3: unheapified array fails while api.heapify() achieves 3-star S-Rank', () => {
+    const level83 = getLevelById('heap-3')!;
+    expect(level83).toBeDefined();
+
+    const failRes = runPlayerCodeSync(level83, '// do nothing');
+    expect(failRes.ok).toBe(true);
+    expect(failRes.score?.passed).toBe(false);
+
+    const passRes = runPlayerCodeSync(level83, 'api.heapify();');
+    expect(passRes.ok).toBe(true);
+    expect(passRes.score?.passed).toBe(true);
+    expect(passRes.score?.stars).toBe(3);
+    expect(passRes.score?.rank).toBe('S');
   });
 });

@@ -1,7 +1,17 @@
 import type {
   AnyWorldState,
   ArraysWorldState,
+  DPCell,
+  DPItem,
+  DPMode,
+  DPWorldState,
   GridCell,
+  HashBucket,
+  HashResolutionStrategy,
+  HashTableWorldState,
+  HeapKind,
+  HeapNodeSlot,
+  HeapWorldState,
   LinkedListWorldState,
   PathfindingWorldState,
   SandboxPreset,
@@ -10,6 +20,8 @@ import type {
   TreesWorldState,
   WorldId,
 } from '../engine/types';
+import { computeReadyCells } from '../engine/worlds/dpEngine';
+import { computeHeapViolations } from '../engine/worlds/heapEngine';
 import { recomputeTreeLayoutAndMetrics } from '../engine/worlds/treesEngine';
 
 function makeGrid(
@@ -89,6 +101,122 @@ function makeTreePreset(
   };
   recomputeTreeLayoutAndMetrics(state);
   return state;
+}
+
+function makeDPPreset(opts: {
+  mode: DPMode;
+  rows: number;
+  cols: number;
+  rowLabels: string[];
+  colLabels: string[];
+  baseCells: Array<[number, number, number]>;
+  expectedTable: (number | null)[][];
+  optimalPath: [number, number][];
+  targetAnswer: number;
+  naiveRecursionOps: number;
+  items?: DPItem[];
+  strA?: string;
+  strB?: string;
+}): DPWorldState {
+  const baseMap = new Map(opts.baseCells.map(([r, c, v]) => [`${r},${c}`, v]));
+  const cells: DPCell[] = [];
+  for (let r = 0; r < opts.rows; r++) {
+    for (let c = 0; c < opts.cols; c++) {
+      const key = `${r},${c}`;
+      if (baseMap.has(key)) {
+        cells.push({ row: r, col: c, value: baseMap.get(key)!, state: 'computed' });
+      } else {
+        cells.push({ row: r, col: c, value: null, state: 'empty' });
+      }
+    }
+  }
+  const state: DPWorldState = {
+    world: 'dp',
+    mode: opts.mode,
+    rows: opts.rows,
+    cols: opts.cols,
+    rowLabels: [...opts.rowLabels],
+    colLabels: [...opts.colLabels],
+    cells,
+    activeCell: null,
+    activeDeps: [],
+    targetAnswer: opts.targetAnswer,
+    expectedTable: opts.expectedTable.map((row) => [...row]),
+    optimalPath: opts.optimalPath.map(([r, c]) => [r, c] as [number, number]),
+    naiveRecursionOps: opts.naiveRecursionOps,
+    items: opts.items ? opts.items.map((item) => ({ ...item })) : undefined,
+    strA: opts.strA,
+    strB: opts.strB,
+    tracebackShown: false,
+  };
+  computeReadyCells(state);
+  return state;
+}
+
+function makeHashPreset(opts: {
+  strategy: HashResolutionStrategy;
+  capacity: number;
+  initialEntries: Array<{ bucket: number; key: number; value: string }>;
+  pendingKeys: Array<{ key: number; value: string }>;
+}): HashTableWorldState {
+  const buckets: HashBucket[] = Array.from({ length: opts.capacity }, (_, index) => ({
+    index,
+    entry: null,
+    tombstone: false,
+    chain: [],
+    state: 'idle',
+  }));
+  for (const item of opts.initialEntries) {
+    const b = buckets[item.bucket];
+    if (!b) continue;
+    const entry = {
+      key: item.key,
+      value: item.value,
+      originalBucket: ((item.key % opts.capacity) + opts.capacity) % opts.capacity,
+      state: 'idle' as const,
+    };
+    if (opts.strategy === 'chaining') {
+      b.chain.push(entry);
+    } else {
+      b.entry = entry;
+    }
+  }
+  return {
+    world: 'hash-table',
+    mode: 'sandbox',
+    strategy: opts.strategy,
+    capacity: opts.capacity,
+    buckets,
+    pendingKeys: opts.pendingKeys.map((k) => ({ ...k })),
+    lastHashBeam: null,
+    foundBucket: null,
+    loadFactorThreshold: 0.7,
+    rehashCount: 0,
+    collisions: 0,
+  };
+}
+
+function makeHeapPreset(opts: {
+  kind: HeapKind;
+  values: number[];
+  pendingQueue?: number[];
+  prefix: string;
+}): HeapWorldState {
+  const items: HeapNodeSlot[] = opts.values.map((value, idx) => ({
+    id: `${opts.prefix}-${idx}`,
+    value,
+    state: 'idle',
+  }));
+  computeHeapViolations(items, opts.kind);
+  return {
+    world: 'heap',
+    kind: opts.kind,
+    mode: 'sandbox',
+    items,
+    pendingQueue: opts.pendingQueue ? [...opts.pendingQueue] : [],
+    extracted: [],
+    selectedIndex: items.length > 0 ? 0 : null,
+  };
 }
 
 const DEFAULT_ARRAYS: ArraysWorldState = {
@@ -343,12 +471,142 @@ const ZIGZAG_LR_STRESS: TreesWorldState = makeTreePreset('t1', [
   { id: 't6', value: 70, leftId: null, rightId: null },
 ]);
 
+const DP_KNAPSACK_MATRIX: DPWorldState = makeDPPreset({
+  mode: 'knapsack',
+  rows: 4,
+  cols: 6,
+  rowLabels: ['0 items', 'A(w2,v12)', 'B(w3,v18)', 'C(w4,v22)'],
+  colLabels: ['cap 0', 'cap 1', 'cap 2', 'cap 3', 'cap 4', 'cap 5'],
+  items: [
+    { label: 'Core A', weight: 2, value: 12 },
+    { label: 'Core B', weight: 3, value: 18 },
+    { label: 'Core C', weight: 4, value: 22 },
+  ],
+  baseCells: [
+    [0, 0, 0],
+    [0, 1, 0],
+    [0, 2, 0],
+    [0, 3, 0],
+    [0, 4, 0],
+    [0, 5, 0],
+    [1, 0, 0],
+    [2, 0, 0],
+    [3, 0, 0],
+  ],
+  expectedTable: [
+    [0, 0, 0, 0, 0, 0],
+    [0, 0, 12, 12, 12, 12],
+    [0, 0, 12, 18, 18, 30],
+    [0, 0, 12, 18, 22, 30],
+  ],
+  optimalPath: [
+    [0, 0],
+    [1, 2],
+    [2, 5],
+    [3, 5],
+  ],
+  targetAnswer: 30,
+  naiveRecursionOps: 32,
+});
+
+const DP_LCS_MATRIX: DPWorldState = makeDPPreset({
+  mode: 'lcs',
+  rows: 5,
+  cols: 5,
+  rowLabels: ['∅', 'A', 'X', 'I', 'M'],
+  colLabels: ['∅', 'A', 'I', 'M', 'X'],
+  strA: 'AXIM',
+  strB: 'AIMX',
+  baseCells: [
+    [0, 0, 0],
+    [0, 1, 0],
+    [0, 2, 0],
+    [0, 3, 0],
+    [0, 4, 0],
+    [1, 0, 0],
+    [2, 0, 0],
+    [3, 0, 0],
+    [4, 0, 0],
+  ],
+  expectedTable: [
+    [0, 0, 0, 0, 0],
+    [0, 1, 1, 1, 1],
+    [0, 1, 1, 1, 2],
+    [0, 1, 2, 2, 2],
+    [0, 1, 2, 3, 3],
+  ],
+  optimalPath: [
+    [0, 0],
+    [1, 1],
+    [2, 1],
+    [3, 2],
+    [4, 3],
+    [4, 4],
+  ],
+  targetAnswer: 3,
+  naiveRecursionOps: 70,
+});
+
+const DEFAULT_HASH_TABLE: HashTableWorldState = makeHashPreset({
+  strategy: 'linear',
+  capacity: 7,
+  initialEntries: [
+    { bucket: 2, key: 9, value: 'K9' },
+    { bucket: 4, key: 18, value: 'K18' },
+  ],
+  pendingKeys: [
+    { key: 16, value: 'K16' },
+    { key: 23, value: 'K23' },
+    { key: 30, value: 'K30' },
+    { key: 11, value: 'K11' },
+  ],
+});
+
+const CHAINING_VAULT_PRESET: HashTableWorldState = makeHashPreset({
+  strategy: 'chaining',
+  capacity: 5,
+  initialEntries: [
+    { bucket: 1, key: 6, value: 'K6' },
+    { bucket: 1, key: 11, value: 'K11' },
+    { bucket: 2, key: 7, value: 'K7' },
+  ],
+  pendingKeys: [
+    { key: 16, value: 'K16' },
+    { key: 12, value: 'K12' },
+    { key: 21, value: 'K21' },
+  ],
+});
+
+const DEFAULT_HEAP: HeapWorldState = makeHeapPreset({
+  kind: 'min',
+  values: [14, 28, 22, 45, 36, 52],
+  pendingQueue: [10, 19],
+  prefix: 'sb-h',
+});
+
+const UNSORTED_HEAPIFY_PRESET: HeapWorldState = makeHeapPreset({
+  kind: 'min',
+  values: [64, 42, 55, 18, 30, 12, 25],
+  pendingQueue: [],
+  prefix: 'sb-uh',
+});
+
+const MAX_HEAP_SPIRE_PRESET: HeapWorldState = makeHeapPreset({
+  kind: 'max',
+  values: [88, 64, 72, 31, 45, 50, 29],
+  pendingQueue: [95, 60],
+  prefix: 'sb-mh',
+});
+
 export const SANDBOX_DEFAULTS: Record<WorldId, AnyWorldState> = {
   arrays: DEFAULT_ARRAYS,
   'linked-lists': DEFAULT_LINKED_LIST,
   'stacks-queues': DEFAULT_STACKS_QUEUES,
   pathfinding: WEIGHTED_CANYON_MAZE,
   trees: BALANCED_BST_7,
+  dp: DP_KNAPSACK_MATRIX,
+  'hash-table': DEFAULT_HASH_TABLE,
+  heap: DEFAULT_HEAP,
 };
 
 export const SANDBOX_PRESETS_BUILTIN: SandboxPreset[] = [
@@ -435,5 +693,47 @@ export const SANDBOX_PRESETS_BUILTIN: SandboxPreset[] = [
     worldId: 'trees',
     createdAt: 1700000012000,
     state: ZIGZAG_LR_STRESS,
+  },
+  {
+    id: 'builtin-dp-knapsack',
+    name: '0/1 Knapsack Matrix',
+    worldId: 'dp',
+    createdAt: 1700000013000,
+    state: DP_KNAPSACK_MATRIX,
+  },
+  {
+    id: 'builtin-dp-lcs',
+    name: 'LCS Alignment Matrix',
+    worldId: 'dp',
+    createdAt: 1700000014000,
+    state: DP_LCS_MATRIX,
+  },
+  {
+    id: 'builtin-hash-linear',
+    name: 'Linear Probing Cluster',
+    worldId: 'hash-table',
+    createdAt: 1700000015000,
+    state: DEFAULT_HASH_TABLE,
+  },
+  {
+    id: 'builtin-hash-chaining',
+    name: 'Separate Chaining Vault',
+    worldId: 'hash-table',
+    createdAt: 1700000016000,
+    state: CHAINING_VAULT_PRESET,
+  },
+  {
+    id: 'builtin-heap-unsorted',
+    name: 'Unsorted Array (Heapify)',
+    worldId: 'heap',
+    createdAt: 1700000017000,
+    state: UNSORTED_HEAPIFY_PRESET,
+  },
+  {
+    id: 'builtin-heap-max',
+    name: 'Max-Heap Priority Spire',
+    worldId: 'heap',
+    createdAt: 1700000018000,
+    state: MAX_HEAP_SPIRE_PRESET,
   },
 ];

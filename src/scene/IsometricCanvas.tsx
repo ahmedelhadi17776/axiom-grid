@@ -10,6 +10,9 @@ import { LinkedListScene3D } from './worlds/LinkedListScene3D';
 import { StacksQueuesScene3D } from './worlds/StacksQueuesScene3D';
 import { PathfindingScene3D } from './worlds/PathfindingScene3D';
 import { TreesScene3D } from './worlds/TreesScene3D';
+import { DPScene3D } from './worlds/DPScene3D';
+import { HashTableScene3D } from './worlds/HashTableScene3D';
+import { HeapScene3D } from './worlds/HeapScene3D';
 
 export interface DirectAction {
   world: WorldId;
@@ -142,6 +145,27 @@ export function IsometricCanvas({
               )}
               {worldState.world === 'trees' && (
                 <TreesScene3D
+                  state={worldState}
+                  interactive={interactive}
+                  onDirectAction={onDirectAction}
+                />
+              )}
+              {worldState.world === 'dp' && (
+                <DPScene3D
+                  state={worldState}
+                  interactive={interactive}
+                  onDirectAction={onDirectAction}
+                />
+              )}
+              {worldState.world === 'hash-table' && (
+                <HashTableScene3D
+                  state={worldState}
+                  interactive={interactive}
+                  onDirectAction={onDirectAction}
+                />
+              )}
+              {worldState.world === 'heap' && (
+                <HeapScene3D
                   state={worldState}
                   interactive={interactive}
                   onDirectAction={onDirectAction}

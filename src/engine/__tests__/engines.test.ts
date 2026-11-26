@@ -1,19 +1,29 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyDirectAction,
+  computeLoadFactor,
+  computeReadyCells,
+  computeRunningMedian,
   createArraysSession,
+  createDPSession,
+  createHashTableSession,
+  createHeapSession,
   createLinkedListSession,
   createPathfindingSession,
   createStacksQueuesSession,
   createTreesSession,
   isValidBST,
+  isValidHeap,
   recomputeTreeLayoutAndMetrics,
 } from '../worlds';
 import { runPlayerCodeSync } from '../../sandbox/codeRunner';
 import { ARRAYS_LEVELS } from '../../levels/arraysLevels';
 import type {
   ArraysWorldState,
+  DPWorldState,
   GridCell,
+  HashTableWorldState,
+  HeapWorldState,
   LinkedListWorldState,
   PathfindingAlgorithm,
   PathfindingWorldState,
@@ -149,6 +159,85 @@ function makeBalancedTreeState(searchTarget?: number): TreesWorldState {
   return state;
 }
 
+function makeFibDPState(): DPWorldState {
+  const state: DPWorldState = {
+    world: 'dp',
+    mode: 'fib',
+    rows: 1,
+    cols: 5,
+    rowLabels: ['ways'],
+    colLabels: ['s0', 's1', 's2', 's3', 's4'],
+    cells: [
+      { row: 0, col: 0, value: 1, state: 'computed' },
+      { row: 0, col: 1, value: 1, state: 'computed' },
+      { row: 0, col: 2, value: null, state: 'empty' },
+      { row: 0, col: 3, value: null, state: 'empty' },
+      { row: 0, col: 4, value: null, state: 'empty' },
+    ],
+    activeCell: null,
+    activeDeps: [],
+    targetAnswer: 5,
+    expectedTable: [[1, 1, 2, 3, 5]],
+    optimalPath: [
+      [0, 0],
+      [0, 1],
+      [0, 2],
+      [0, 3],
+      [0, 4],
+    ],
+    tracebackShown: false,
+  };
+  computeReadyCells(state);
+  return state;
+}
+
+function makeHashState(
+  capacity = 5,
+  strategy: 'linear' | 'chaining' = 'linear',
+  pendingKeys: Array<{ key: number; value: string }> = []
+): HashTableWorldState {
+  return {
+    world: 'hash-table',
+    mode: 'sandbox',
+    strategy,
+    capacity,
+    buckets: Array.from({ length: capacity }, (_, index) => ({
+      index,
+      entry: null,
+      tombstone: false,
+      chain: [],
+      state: 'idle',
+    })),
+    pendingKeys,
+    lastHashBeam: null,
+    foundBucket: null,
+    loadFactorThreshold: 0.7,
+    rehashCount: 0,
+    collisions: 0,
+  };
+}
+
+function makeHeapState(
+  values: number[],
+  kind: 'min' | 'max' = 'min',
+  pendingQueue: number[] = []
+): HeapWorldState {
+  return {
+    world: 'heap',
+    kind,
+    mode: 'sandbox',
+    items: values.map((value, idx) => ({
+      id: `h-${idx}`,
+      value,
+      state: 'idle',
+    })),
+    pendingQueue,
+    extracted: [],
+    secondaryItems: [],
+    selectedIndex: values.length > 0 ? 0 : null,
+  };
+}
+
 describe('Arrays engine', () => {
   it('supports get, compare, swap, pointers, window, and BOUNDS_FAULT', () => {
     const session = createArraysSession(makeArraysState([30, 10, 20, 40]));
@@ -172,7 +261,6 @@ describe('Arrays engine', () => {
     expect(afterWindow.slots[1].state).toBe('window');
     expect(afterWindow.slots[2].state).toBe('window');
 
-    // Out-of-bounds triggers BOUNDS_FAULT
     const nanVal = session.get(99);
     expect(Number.isNaN(nanVal)).toBe(true);
     session.swap(-1, 2);
@@ -186,9 +274,9 @@ describe('Arrays engine', () => {
     const session = createArraysSession(
       makeArraysState([10, 20, 30, 40, 50], 40)
     );
-    expect(session.probe(2)).toBe(-1); // 30 < 40
-    expect(session.probe(4)).toBe(1); // 50 > 40
-    expect(session.probe(3)).toBe(0); // 40 === 40
+    expect(session.probe(2)).toBe(-1);
+    expect(session.probe(4)).toBe(1);
+    expect(session.probe(3)).toBe(0);
 
     const finalState = session.getState();
     expect(finalState.foundIndex).toBe(3);
@@ -216,7 +304,6 @@ describe('Linked List engine', () => {
 
   it('automatically detects MEMORY_LEAK when stranding a previously reachable node', () => {
     const session = createLinkedListSession(makeLinkedListState());
-    // Strands n4 by redirecting n2 -> n3 while n3.next is null
     session.link('n2', 'n3');
 
     expect(session.getMetrics().leaks).toBe(1);
@@ -255,7 +342,6 @@ describe('Linked List engine', () => {
     expect(met).toBe(true);
     expect(session.getEvents().some((e) => e.type === 'CYCLE_DETECTED')).toBe(true);
 
-    // Sever back-edge
     session.link('n4', null);
     expect(session.detectCycle().hasCycle).toBe(false);
     expect(session.getState().cycleSevered).toBe(true);
@@ -265,15 +351,13 @@ describe('Linked List engine', () => {
 describe('Stacks & Queues engine', () => {
   it('enforces LIFO on stacks and FIFO on queues and tracks peak auxMemory', () => {
     const session = createStacksQueuesSession(makeStacksQueuesState(3));
-    expect(session.intake('stk')).toBe(true); // A
-    expect(session.intake('stk')).toBe(true); // B
-    expect(session.intake('que')).toBe(true); // C
+    expect(session.intake('stk')).toBe(true);
+    expect(session.intake('stk')).toBe(true);
+    expect(session.intake('que')).toBe(true);
     expect(session.getMetrics().auxMemory).toBe(3);
 
-    // LIFO stack emits B then A
     expect(session.emit('stk')).toBe('B');
     expect(session.emit('stk')).toBe('A');
-    // FIFO queue emits C
     expect(session.emit('que')).toBe('C');
 
     expect(session.getState().outputEmitted.map((p) => p.value)).toEqual([
@@ -281,18 +365,15 @@ describe('Stacks & Queues engine', () => {
       'A',
       'C',
     ]);
-    // Peak auxMemory remains 3 even after buffers are drained
     expect(session.getMetrics().auxMemory).toBe(3);
   });
 
   it('emits OVERFLOW on full buffer and UNDERFLOW on empty buffer', () => {
     const session = createStacksQueuesSession(makeStacksQueuesState(2));
 
-    // Underflow on empty emit & transfer
     expect(session.emit('stk')).toBeNull();
     expect(session.transfer('stk', 'que')).toBe(false);
 
-    // Fill stack to capacity 2, then trigger overflow on 3rd intake
     expect(session.intake('stk')).toBe(true);
     expect(session.intake('stk')).toBe(true);
     expect(session.intake('stk')).toBe(false);
@@ -322,7 +403,6 @@ describe('Pathfinding engine', () => {
     const session = createPathfindingSession(grid);
     const res = session.runSearch();
     expect(res.pathFound).toBe(true);
-    // Detour around 2-high wall: down 2, right 4, up 2 = 8 hops
     expect(res.pathCost).toBe(8);
     expect(session.getEvents().some((e) => e.type === 'PATH_FOUND')).toBe(true);
   });
@@ -437,9 +517,9 @@ describe('Pathfinding engine', () => {
 describe('Trees engine', () => {
   it('supports probe() with BST sign comparisons and foundNodeId lock', () => {
     const session = createTreesSession(makeBalancedTreeState(62));
-    expect(session.probe('t1')).toBe(-1); // 50 < 62
-    expect(session.probe('t3')).toBe(1); // 75 > 62
-    expect(session.probe('t6')).toBe(0); // 62 === 62
+    expect(session.probe('t1')).toBe(-1);
+    expect(session.probe('t3')).toBe(1);
+    expect(session.probe('t6')).toBe(0);
     expect(session.getState().foundNodeId).toBe('t6');
     expect(session.getMetrics().cycles).toBe(3);
   });
@@ -460,17 +540,14 @@ describe('Trees engine', () => {
     };
     const session = createTreesSession(initial);
 
-    // Invalid: 35 cannot dock on left of 25
     expect(session.insertAt('t2', 'left', 35)).toBeNull();
     expect(session.getState().invariantViolations).toBe(1);
     expect(session.getEvents().some((e) => e.type === 'INVARIANT_FAULT')).toBe(
       true
     );
 
-    // Valid: 35 docks on right of 25 (25 < 35 < 50)
     const id35 = session.insertAt('t2', 'right');
     expect(id35).toBeTruthy();
-    // Standard insert for 15
     const id15 = session.insert(15);
     expect(id15).toBeTruthy();
 
@@ -490,15 +567,12 @@ describe('Trees engine', () => {
   it('handles 0-child, 1-child, and 2-child deleteNode while preserving BST invariant', () => {
     const session = createTreesSession(makeBalancedTreeState());
 
-    // 0-child leaf delete (12)
     expect(session.deleteNode('t4')).toBe(true);
     expect(isValidBST(session.getState())).toBe(true);
 
-    // 1-child node delete (t2 now only has right child t5(37))
     expect(session.deleteNode('t2')).toBe(true);
     expect(isValidBST(session.getState())).toBe(true);
 
-    // 2-child root delete (t1(50) promotes in-order successor t6(62))
     expect(session.deleteNode('t1')).toBe(true);
     const afterRootDel = session.getState();
     expect(afterRootDel.rootId).toBe('t6');
@@ -536,12 +610,120 @@ describe('Trees engine', () => {
       expect(Math.abs(node.balanceFactor ?? 0)).toBeLessThanOrEqual(1);
     }
 
-    // Verify rotateRight is reversible on root when root has a left child
     const rootId = balanced.rootId!;
     if (balanced.nodes[rootId].leftId) {
       expect(session.rotateRight(rootId)).toBe(true);
       expect(isValidBST(session.getState())).toBe(true);
     }
+  });
+});
+
+describe('DP engine', () => {
+  it('supports computeCell, set, dependency guard, traceOptimal, and runTabulation', () => {
+    const session = createDPSession(makeFibDPState());
+    // Out-of-order computeCell fails because (0, 2) isn't computed yet
+    expect(session.computeCell(0, 3)).toBeNull();
+    expect(session.getEvents().some((e) => e.type === 'FAIL')).toBe(true);
+
+    // Valid step-by-step computation
+    expect(session.computeCell(0, 2)).toBe(2);
+    session.set(0, 3, 3, [
+      [0, 2],
+      [0, 1],
+    ]);
+    expect(session.get(0, 3)).toBe(3);
+
+    const answer = session.runTabulation();
+    expect(answer).toBe(5);
+    expect(session.getState().tracebackShown).toBe(true);
+    expect(session.getEvents().some((e) => e.type === 'DP_TRACE')).toBe(true);
+  });
+});
+
+describe('Hash Table engine', () => {
+  it('supports linear probing, collisions, tombstone preservation, and 2x rehashing', () => {
+    const session = createHashTableSession(makeHashState(5, 'linear'));
+    expect(session.insert(6, 'A')).toBe(1); // 6 % 5 = 1
+    expect(session.insert(11, 'B')).toBe(2); // collides at 1 -> probes to 2
+    expect(session.getState().collisions).toBeGreaterThan(0);
+    expect(session.getEvents().some((e) => e.type === 'COLLISION')).toBe(true);
+
+    // Removing 6 with tombstone keeps lookup(11) working
+    expect(session.remove(6, true)).toBe(true);
+    expect(session.getEvents().some((e) => e.type === 'TOMBSTONE')).toBe(true);
+    expect(session.lookup(11)).toBe(2);
+
+    // Rehashing doubles capacity to 10 and repositions 11 -> 11 % 10 = 1
+    session.rehash();
+    const afterRehash = session.getState();
+    expect(afterRehash.capacity).toBe(10);
+    expect(afterRehash.rehashCount).toBe(1);
+    expect(session.lookup(11)).toBe(1);
+    expect(computeLoadFactor(afterRehash)).toBeCloseTo(0.1);
+  });
+
+  it('supports separate chaining, insertAtBucket mismatch guard, and markPair', () => {
+    const chained = createHashTableSession(makeHashState(5, 'chaining'));
+    expect(chained.insert(6, 'A')).toBe(1);
+    expect(chained.insert(11, 'B')).toBe(1);
+    expect(chained.getState().buckets[1].chain).toHaveLength(2);
+    expect(chained.lookup(11)).toBe(1);
+
+    // insertAtBucket rejects wrong bucket
+    const direct = createHashTableSession(
+      makeHashState(7, 'linear', [{ key: 10, value: 'K10' }])
+    );
+    expect(direct.insertAtBucket(0)).toBe(false); // 10 % 7 = 3 != 0
+    expect(direct.insertAtBucket(3)).toBe(true);
+
+    // markPair validates Two-Sum pair
+    const twoSumState: HashTableWorldState = {
+      ...makeHashState(7, 'linear'),
+      mode: 'two-sum',
+      twoSumTarget: 54,
+      twoSumArray: [12, 35, 7, 19],
+    };
+    const twoSum = createHashTableSession(twoSumState);
+    expect(twoSum.markPair(12, 7)).toBe(false);
+    expect(twoSum.markPair(35, 19)).toBe(true);
+    expect(twoSum.getState().foundPair).toEqual([35, 19]);
+  });
+});
+
+describe('Heap engine', () => {
+  it('supports insert, extractRoot, heapify, and insertDual running median', () => {
+    const session = createHeapSession(makeHeapState([20, 30, 40], 'min'));
+    session.insert(10);
+    expect(session.peek()).toBe(10);
+    expect(isValidHeap(session.getState().items, 'min')).toBe(true);
+
+    expect(session.extractRoot()).toBe(10);
+    expect(session.peek()).toBe(20);
+    expect(session.extracted()).toEqual([10]);
+    expect(isValidHeap(session.getState().items, 'min')).toBe(true);
+
+    // Floyd bottom-up heapify on unsorted array
+    const unsorted = createHeapSession(
+      makeHeapState([64, 42, 55, 18, 30, 12, 25], 'min')
+    );
+    expect(isValidHeap(unsorted.getState().items, 'min')).toBe(false);
+    unsorted.heapify();
+    expect(isValidHeap(unsorted.getState().items, 'min')).toBe(true);
+    expect(unsorted.peek()).toBe(12);
+
+    // Twin Spires running median via insertDual
+    const medianSession = createHeapSession({
+      ...makeHeapState([], 'max', [40, 10, 30, 50, 20]),
+      mode: 'median',
+      targetMedian: 30,
+    });
+    while (medianSession.pendingQueue().length > 0) {
+      medianSession.insertDual();
+    }
+    const medState = medianSession.getState();
+    expect(
+      computeRunningMedian(medState.items, medState.secondaryItems ?? [])
+    ).toBe(30);
   });
 });
 
@@ -573,7 +755,7 @@ describe('Code Runner (runPlayerCodeSync)', () => {
   });
 });
 
-describe('applyDirectAction across all 5 worlds', () => {
+describe('applyDirectAction across all 8 worlds', () => {
   it('applies direct actions for arrays (SWAP, SET_WINDOW, PROBE)', () => {
     const initial = makeArraysState([9, 4, 7], 4);
     const probed = applyDirectAction(initial, {
@@ -707,5 +889,65 @@ describe('applyDirectAction across all 5 worlds', () => {
     expect((r2.state as TreesWorldState).visitedSequence).toEqual([
       12, 25, 37, 50, 62, 75, 88,
     ]);
+  });
+
+  it('applies direct actions for dp', () => {
+    const initial = makeFibDPState();
+    const r1 = applyDirectAction(initial, {
+      world: 'dp',
+      type: 'COMPUTE_CELL',
+      payload: { row: 0, col: 2 },
+    });
+    expect((r1.state as DPWorldState).cells[2].value).toBe(2);
+
+    const r2 = applyDirectAction(
+      r1.state,
+      {
+        world: 'dp',
+        type: 'RUN_TABULATION',
+      },
+      r1.metrics
+    );
+    const dpState = r2.state as DPWorldState;
+    expect(dpState.cells[4].value).toBe(5);
+    expect(dpState.tracebackShown).toBe(true);
+  });
+
+  it('applies direct actions for hash-table', () => {
+    const initial = makeHashState(7, 'linear', [{ key: 10, value: 'K10' }]);
+    const r1 = applyDirectAction(initial, {
+      world: 'hash-table',
+      type: 'INSERT_AT_BUCKET',
+      payload: { bucketIndex: 3 },
+    });
+    const r2 = applyDirectAction(
+      r1.state,
+      {
+        world: 'hash-table',
+        type: 'LOOKUP',
+        payload: { key: 10 },
+      },
+      r1.metrics
+    );
+    expect((r2.state as HashTableWorldState).foundBucket).toBe(3);
+  });
+
+  it('applies direct actions for heap', () => {
+    const initial = makeHeapState([40, 20, 30], 'min', [10]);
+    const r1 = applyDirectAction(initial, {
+      world: 'heap',
+      type: 'HEAPIFY',
+    });
+    expect(isValidHeap((r1.state as HeapWorldState).items, 'min')).toBe(true);
+
+    const r2 = applyDirectAction(
+      r1.state,
+      {
+        world: 'heap',
+        type: 'INSERT',
+      },
+      r1.metrics
+    );
+    expect((r2.state as HeapWorldState).items[0].value).toBe(10);
   });
 });

@@ -18,6 +18,9 @@ const COLOR_AMBER = new THREE.Color('#FBBF24');
 const COLOR_EMERALD = new THREE.Color('#34D399');
 const COLOR_CRIMSON = new THREE.Color('#FB7185');
 const COLOR_VIOLET = new THREE.Color('#A78BFA');
+const COLOR_INDIGO = new THREE.Color('#818CF8');
+const COLOR_ORANGE = new THREE.Color('#FB923C');
+const COLOR_ROSE = new THREE.Color('#F472B6');
 
 function getEventColor(type: SimEventType): THREE.Color {
   switch (type) {
@@ -26,11 +29,22 @@ function getEventColor(type: SimEventType): THREE.Color {
     case 'RELAX_EDGE':
     case 'ROTATE_LEFT':
     case 'ROTATE_RIGHT':
+    case 'COLLISION':
+    case 'SIFT_DOWN':
       return COLOR_AMBER;
     case 'INSERT_NODE':
       return COLOR_TEAL;
+    case 'DP_COMPUTE':
+      return COLOR_INDIGO;
+    case 'HASH_PROBE':
+      return COLOR_ORANGE;
+    case 'SIFT_UP':
+    case 'HEAPIFY':
+      return COLOR_ROSE;
     case 'SUCCESS':
     case 'PATH_FOUND':
+    case 'DP_TRACE':
+    case 'EXTRACT_ROOT':
       return COLOR_EMERALD;
     case 'MEMORY_LEAK':
     case 'OVERFLOW':
@@ -46,8 +60,10 @@ function getEventColor(type: SimEventType): THREE.Color {
     case 'DEQUEUE':
     case 'UNLINK':
     case 'DELETE_NODE':
+    case 'TOMBSTONE':
       return COLOR_VIOLET;
     case 'PROBE':
+    case 'REHASH':
     default:
       return COLOR_CYAN;
   }
@@ -84,6 +100,40 @@ function getBurstOrigin(
     const node = worldState.nodes[target];
     if (node) {
       out.set(node.pos[0], node.pos[1] + 1.0, node.pos[2]);
+    }
+  } else if (worldState.world === 'dp') {
+    const parts = target.split(',');
+    if (parts.length === 2) {
+      const r = Number(parts[0]);
+      const c = Number(parts[1]);
+      if (Number.isFinite(r) && Number.isFinite(c)) {
+        const spacing = 1.42;
+        const ox = ((worldState.cols - 1) * spacing) / 2;
+        const oz = ((worldState.rows - 1) * spacing) / 2;
+        out.set(c * spacing - ox, 1.2, r * spacing - oz);
+      }
+    }
+  } else if (worldState.world === 'hash-table') {
+    const cleaned = target.replace(/^b/i, '');
+    const idx = Number(cleaned);
+    if (Number.isInteger(idx) && idx >= 0 && idx < worldState.capacity) {
+      const spacing = 1.5;
+      const ox = ((worldState.capacity - 1) * spacing) / 2;
+      out.set(idx * spacing - ox, 1.15, 0);
+    }
+  } else if (worldState.world === 'heap') {
+    let idx = worldState.items.findIndex((item) => item.id === target);
+    if (idx === -1) {
+      const parsed = Number(target);
+      if (Number.isInteger(parsed) && parsed >= 0 && parsed < worldState.items.length) {
+        idx = parsed;
+      }
+    }
+    if (idx >= 0) {
+      const n = Math.max(1, worldState.items.length);
+      const spacing = 1.35;
+      const ox = ((n - 1) * spacing) / 2;
+      out.set(idx * spacing - ox, 1.5, 0.2);
     }
   } else if (worldState.world === 'pathfinding') {
     const parts = target.split(',');
@@ -181,7 +231,10 @@ export function ParticleSystem({ activeEvent, worldState }: ParticleSystemProps)
     if (!mesh) return;
 
     const color = getEventColor(activeEvent.type);
-    const isVictory = activeEvent.type === 'SUCCESS' || activeEvent.type === 'PATH_FOUND';
+    const isVictory =
+      activeEvent.type === 'SUCCESS' ||
+      activeEvent.type === 'PATH_FOUND' ||
+      activeEvent.type === 'DP_TRACE';
     const isError =
       activeEvent.type === 'MEMORY_LEAK' ||
       activeEvent.type === 'OVERFLOW' ||

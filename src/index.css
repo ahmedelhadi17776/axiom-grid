@@ -10,6 +10,9 @@
   --color-neon-emerald: #34D399;
   --color-neon-crimson: #FB7185;
   --color-neon-violet: #A78BFA;
+  --color-neon-indigo: #818CF8;
+  --color-neon-orange: #FB923C;
+  --color-neon-rose: #F472B6;
 
   --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -101,6 +104,18 @@
   box-shadow: 0 0 11px rgba(167, 139, 250, 0.22), inset 0 0 6px rgba(167, 139, 250, 0.09);
 }
 
+.glow-indigo {
+  box-shadow: 0 0 11px rgba(129, 140, 248, 0.22), inset 0 0 6px rgba(129, 140, 248, 0.09);
+}
+
+.glow-orange {
+  box-shadow: 0 0 11px rgba(251, 146, 60, 0.22), inset 0 0 6px rgba(251, 146, 60, 0.09);
+}
+
+.glow-rose {
+  box-shadow: 0 0 11px rgba(244, 114, 182, 0.22), inset 0 0 6px rgba(244, 114, 182, 0.09);
+}
+
 .text-glow-cyan {
   text-shadow: 0 0 8px rgba(56, 189, 248, 0.42);
 }
@@ -123,6 +138,18 @@
 
 .text-glow-violet {
   text-shadow: 0 0 8px rgba(167, 139, 250, 0.42);
+}
+
+.text-glow-indigo {
+  text-shadow: 0 0 8px rgba(129, 140, 248, 0.42);
+}
+
+.text-glow-orange {
+  text-shadow: 0 0 8px rgba(251, 146, 60, 0.42);
+}
+
+.text-glow-rose {
+  text-shadow: 0 0 8px rgba(244, 114, 182, 0.42);
 }
 
 /* Subtle Architectural Circuit Grid Overlay */

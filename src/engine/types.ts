@@ -3,7 +3,10 @@ export type WorldId =
   | 'linked-lists'
   | 'stacks-queues'
   | 'pathfinding'
-  | 'trees';
+  | 'trees'
+  | 'dp'
+  | 'hash-table'
+  | 'heap';
 
 export type Rank = 'S' | 'A' | 'B' | 'C';
 
@@ -50,6 +53,16 @@ export type SimEventType =
   | 'ROTATE_LEFT'
   | 'ROTATE_RIGHT'
   | 'INVARIANT_FAULT'
+  | 'DP_COMPUTE'
+  | 'DP_TRACE'
+  | 'HASH_PROBE'
+  | 'COLLISION'
+  | 'REHASH'
+  | 'TOMBSTONE'
+  | 'SIFT_UP'
+  | 'SIFT_DOWN'
+  | 'EXTRACT_ROOT'
+  | 'HEAPIFY'
   | 'SUCCESS'
   | 'FAIL';
 
@@ -267,6 +280,171 @@ export interface TreesWorldState {
 }
 
 /* ============================================================================
+ * World 6: Dynamic Programming (Memo Matrix)
+ * ========================================================================== */
+
+export type DPCellState =
+  | 'empty'
+  | 'ready'
+  | 'active'
+  | 'computed'
+  | 'path'
+  | 'blocked';
+
+export type DPMode =
+  | 'fib'
+  | 'robber'
+  | 'coin-change'
+  | 'grid-paths'
+  | 'knapsack'
+  | 'lcs'
+  | 'sandbox';
+
+export interface DPCell {
+  row: number;
+  col: number;
+  value: number | null;
+  state: DPCellState;
+  label?: string;
+  dependencies?: [number, number][];
+}
+
+export interface DPItem {
+  label: string;
+  weight: number;
+  value: number;
+}
+
+export interface DPWorldState {
+  world: 'dp';
+  mode: DPMode;
+  rows: number;
+  cols: number;
+  rowLabels: string[];
+  colLabels: string[];
+  cells: DPCell[];
+  activeCell: [number, number] | null;
+  activeDeps: [number, number][];
+  targetAnswer: number;
+  expectedTable?: (number | null)[][];
+  optimalPath?: [number, number][];
+  naiveRecursionOps?: number;
+  items?: DPItem[];
+  coins?: number[];
+  strA?: string;
+  strB?: string;
+  tracebackShown?: boolean;
+}
+
+/* ============================================================================
+ * World 7: Hash Tables (Collision Vault)
+ * ========================================================================== */
+
+export type HashResolutionStrategy = 'linear' | 'chaining';
+
+export type HashTableMode =
+  | 'direct'
+  | 'linear-probe'
+  | 'tombstone'
+  | 'chaining'
+  | 'rehash'
+  | 'two-sum'
+  | 'sandbox';
+
+export interface HashEntry {
+  key: number;
+  value: string;
+  originalBucket: number;
+  state?: 'idle' | 'active' | 'collision' | 'found' | 'rehashed';
+}
+
+export type HashBucketState =
+  | 'idle'
+  | 'probing'
+  | 'collision'
+  | 'active'
+  | 'found'
+  | 'tombstone';
+
+export interface HashBucket {
+  index: number;
+  entry: HashEntry | null;
+  tombstone?: boolean;
+  chain: HashEntry[];
+  state: HashBucketState;
+}
+
+export interface HashBeam {
+  key: number;
+  targetBucket: number;
+  landedBucket: number;
+  probePath: number[];
+  collided: boolean;
+}
+
+export interface HashTableWorldState {
+  world: 'hash-table';
+  mode: HashTableMode;
+  strategy: HashResolutionStrategy;
+  capacity: number;
+  buckets: HashBucket[];
+  pendingKeys: Array<{ key: number; value: string }>;
+  lastHashBeam?: HashBeam | null;
+  searchTarget?: number;
+  foundBucket?: number | null;
+  twoSumTarget?: number;
+  twoSumArray?: number[];
+  foundPair?: [number, number] | null;
+  loadFactorThreshold: number;
+  rehashCount: number;
+  collisions: number;
+}
+
+/* ============================================================================
+ * World 8: Heaps & Priority Queues (Priority Spire)
+ * ========================================================================== */
+
+export type HeapKind = 'min' | 'max';
+
+export type HeapMode =
+  | 'sift-up'
+  | 'extract'
+  | 'heapify'
+  | 'top-k'
+  | 'heapsort'
+  | 'median'
+  | 'sandbox';
+
+export type HeapNodeState =
+  | 'idle'
+  | 'active'
+  | 'comparing'
+  | 'swapping'
+  | 'sifted'
+  | 'extracted'
+  | 'violating';
+
+export interface HeapNodeSlot {
+  id: string;
+  value: number;
+  state: HeapNodeState;
+}
+
+export interface HeapWorldState {
+  world: 'heap';
+  kind: HeapKind;
+  mode: HeapMode;
+  items: HeapNodeSlot[];
+  pendingQueue: number[];
+  extracted: number[];
+  secondaryItems?: HeapNodeSlot[];
+  targetExtracted?: number[];
+  targetMedian?: number;
+  maxHeapSize?: number;
+  selectedIndex: number | null;
+}
+
+/* ============================================================================
  * Discriminated Union & Curriculum / Sandbox / Runner Contracts
  * ========================================================================== */
 
@@ -275,7 +453,10 @@ export type AnyWorldState =
   | LinkedListWorldState
   | StacksQueuesWorldState
   | PathfindingWorldState
-  | TreesWorldState;
+  | TreesWorldState
+  | DPWorldState
+  | HashTableWorldState
+  | HeapWorldState;
 
 export interface LevelDefinition<TState extends AnyWorldState = AnyWorldState> {
   id: string;

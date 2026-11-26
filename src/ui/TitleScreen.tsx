@@ -12,7 +12,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { useGameStore } from '../store/useGameStore';
-import { ALL_LEVELS } from '../levels/index';
+import { ALL_LEVELS, WORLD_META } from '../levels/index';
 
 export const TitleScreen: React.FC = () => {
   const goToHub = useGameStore((s) => s.goToHub);
@@ -41,7 +41,7 @@ export const TitleScreen: React.FC = () => {
       <div className="pointer-events-auto flex items-center justify-between gap-3">
         <div className="glass-panel-subtle flex items-center gap-2.5 rounded-full px-4 py-1.5 text-xs font-mono tracking-wider text-slate-200">
           <span className="h-2 w-2 animate-pulse rounded-full bg-neon-emerald shadow-[0_0_8px_rgba(52,211,153,0.65)]" />
-          <span>SYSTEM ONLINE // v2.0</span>
+          <span>SYSTEM ONLINE // v3.0</span>
           {totalStars > 0 && (
             <span className="ml-1.5 border-l border-slate-700/70 pl-2.5 text-amber-200">
               ★ {totalStars}/{maxStars} {sRanks > 0 ? `• ${sRanks} S-RANK` : ''}
@@ -112,8 +112,8 @@ export const TitleScreen: React.FC = () => {
           </p>
 
           <p className="mx-auto mt-2.5 max-w-lg text-sm leading-relaxed text-slate-400">
-            Manipulate isometric memory buses, tether chains, pressurized pipelines,
-            signal grids, and crystalline binary tree canopies — directly or via live JavaScript.
+            Manipulate isometric memory buses, tether chains, signal grids, crystalline trees,
+            DP matrices, hash vaults, and priority spires — directly or via live JavaScript.
           </p>
 
           {/* Primary & Secondary CTAs */}
@@ -144,16 +144,16 @@ export const TitleScreen: React.FC = () => {
       {/* Bottom Capabilities Strip */}
       <div className="pointer-events-auto flex flex-wrap items-center justify-center gap-2.5 text-xs font-mono text-slate-300">
         <span className="glass-panel-subtle flex items-center gap-1.5 rounded-full px-3.5 py-1.5">
-          <Zap className="h-3.5 w-3.5 text-neon-cyan" /> {ALL_LEVELS.length} Handcrafted Puzzles
+          <Zap className="h-3.5 w-3.5 text-neon-cyan" /> {WORLD_META.length} Worlds • {ALL_LEVELS.length} Puzzles
         </span>
         <span className="glass-panel-subtle flex items-center gap-1.5 rounded-full px-3.5 py-1.5">
-          <GitBranch className="h-3.5 w-3.5 text-neon-teal" /> Sector 05: Canopy Trees &amp; AVL
+          <GitBranch className="h-3.5 w-3.5 text-neon-indigo" /> Trees, DP, Hash Vaults &amp; Heaps
         </span>
         <span className="glass-panel-subtle flex items-center gap-1.5 rounded-full px-3.5 py-1.5">
           <span className="text-neon-amber">O(log n)</span> Big-O Cycle &amp; Memory Par
         </span>
         <span className="glass-panel-subtle flex items-center gap-1.5 rounded-full px-3.5 py-1.5">
-          <span className="text-neon-emerald">{'{ }'}</span> Hybrid 3D + JS Code Drawer
+          <span className="text-neon-emerald">{'{ }'}</span> 8-World Interactive Sandbox
         </span>
       </div>
     </motion.div>

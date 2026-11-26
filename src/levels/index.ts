@@ -1,5 +1,8 @@
 import type { LevelDefinition, WorldId } from '../engine/types';
 import { ARRAYS_LEVELS } from './arraysLevels';
+import { DP_LEVELS } from './dpLevels';
+import { HASH_TABLE_LEVELS } from './hashTableLevels';
+import { HEAP_LEVELS } from './heapLevels';
 import { LINKED_LIST_LEVELS } from './linkedListLevels';
 import { PATHFINDING_LEVELS } from './pathfindingLevels';
 import { STACKS_QUEUES_LEVELS } from './stacksQueuesLevels';
@@ -55,6 +58,30 @@ export const WORLD_META: WorldMeta[] = [
     accentColor: '#2DD4BF',
     bigOTheme: 'O(log n) Search · AVL',
   },
+  {
+    id: 'dp',
+    name: 'Dynamic Programming',
+    subtitle: 'Memo Matrix',
+    tagline: 'Overlapping subproblems, dependency beams, Knapsack & LCS tracebacks.',
+    accentColor: '#818CF8',
+    bigOTheme: 'O(n·W) Memo · Tabulation',
+  },
+  {
+    id: 'hash-table',
+    name: 'Hash Tables',
+    subtitle: 'Collision Vault',
+    tagline: 'Modulo prism routing, linear probing, tombstones, chaining & 2x rehashing.',
+    accentColor: '#FB923C',
+    bigOTheme: 'O(1) Avg · Load Factor α',
+  },
+  {
+    id: 'heap',
+    name: 'Heaps & Priority Queues',
+    subtitle: 'Priority Spire',
+    tagline: 'Array-backed binary pyramids, Floyd O(n) heapify, HeapSort & Twin Spires.',
+    accentColor: '#F472B6',
+    bigOTheme: 'O(log n) Sift · O(n) Heapify',
+  },
 ];
 
 export const LEVELS_BY_WORLD: Record<WorldId, LevelDefinition[]> = {
@@ -63,6 +90,9 @@ export const LEVELS_BY_WORLD: Record<WorldId, LevelDefinition[]> = {
   'stacks-queues': STACKS_QUEUES_LEVELS as LevelDefinition[],
   pathfinding: PATHFINDING_LEVELS as LevelDefinition[],
   trees: TREES_LEVELS as LevelDefinition[],
+  dp: DP_LEVELS as LevelDefinition[],
+  'hash-table': HASH_TABLE_LEVELS as LevelDefinition[],
+  heap: HEAP_LEVELS as LevelDefinition[],
 };
 
 export const ALL_LEVELS: LevelDefinition[] = [
@@ -71,6 +101,9 @@ export const ALL_LEVELS: LevelDefinition[] = [
   ...STACKS_QUEUES_LEVELS,
   ...PATHFINDING_LEVELS,
   ...TREES_LEVELS,
+  ...DP_LEVELS,
+  ...HASH_TABLE_LEVELS,
+  ...HEAP_LEVELS,
 ] as LevelDefinition[];
 
 export function getLevelById(id: string): LevelDefinition | undefined {
@@ -90,4 +123,7 @@ export { LINKED_LIST_LEVELS } from './linkedListLevels';
 export { STACKS_QUEUES_LEVELS } from './stacksQueuesLevels';
 export { PATHFINDING_LEVELS } from './pathfindingLevels';
 export { TREES_LEVELS } from './treesLevels';
+export { DP_LEVELS } from './dpLevels';
+export { HASH_TABLE_LEVELS } from './hashTableLevels';
+export { HEAP_LEVELS } from './heapLevels';
 export { SANDBOX_DEFAULTS, SANDBOX_PRESETS_BUILTIN } from './sandboxTemplates';

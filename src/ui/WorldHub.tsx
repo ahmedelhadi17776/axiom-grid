@@ -95,7 +95,7 @@ export const WorldHub: React.FC = () => {
         </div>
       </header>
 
-      {/* 5-Sector Grid */}
+      {/* 8-Sector Grid */}
       <main className="axiom-scroll flex-1 overflow-y-auto px-5 py-6 md:px-8">
         <div className="mx-auto grid max-w-7xl grid-cols-1 gap-5 lg:grid-cols-2">
           {WORLD_META.map((world, wIdx) => {
@@ -107,19 +107,24 @@ export const WorldHub: React.FC = () => {
             const worldSRanks = levels.filter(
               (lvl) => progress[lvl.id]?.rank === 'S'
             ).length;
-            const accent = world.id === 'trees' ? '#2DD4BF' : world.accentColor;
-            const isFullWidthSector =
-              WORLD_META.length % 2 === 1 && wIdx === WORLD_META.length - 1;
+            const accent =
+              world.id === 'trees'
+                ? '#2DD4BF'
+                : world.id === 'dp'
+                  ? '#818CF8'
+                  : world.id === 'hash-table'
+                    ? '#FB923C'
+                    : world.id === 'heap'
+                      ? '#F472B6'
+                      : world.accentColor;
 
             return (
               <motion.section
                 key={world.id}
                 initial={{ y: 16, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: wIdx * 0.05, duration: 0.32 }}
-                className={`glass-panel relative flex flex-col overflow-hidden rounded-2xl p-5 ${
-                  isFullWidthSector ? 'lg:col-span-2' : ''
-                }`}
+                transition={{ delay: wIdx * 0.04, duration: 0.3 }}
+                className="glass-panel relative flex flex-col overflow-hidden rounded-2xl p-5"
                 style={{
                   borderColor: `${accent}30`,
                 }}
@@ -175,11 +180,7 @@ export const WorldHub: React.FC = () => {
                 </div>
 
                 {/* 6-Level Subgrid */}
-                <div
-                  className={`grid grid-cols-1 gap-2.5 sm:grid-cols-2 ${
-                    isFullWidthSector ? 'lg:grid-cols-3' : ''
-                  }`}
-                >
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                   {levels.map((level) => {
                     const unlocked = isLevelUnlocked(level.id);
                     const prog = progress[level.id];

@@ -73,6 +73,27 @@ function computeIdealZoom(
     } else {
       worldSpan = 13.5;
     }
+  } else if (worldState.world === 'dp') {
+    const spanX = worldState.cols * 1.42 + 4.4;
+    const spanZ = worldState.rows * 1.42 + 4.8;
+    worldSpan = Math.max(11.5, spanX, spanZ);
+  } else if (worldState.world === 'hash-table') {
+    let maxChain = 1;
+    for (const b of worldState.buckets) {
+      if (b.chain.length > maxChain) maxChain = b.chain.length;
+    }
+    const spanX = worldState.capacity * 1.55 + 3.6;
+    const spanZ = 7.5 + maxChain * 1.35;
+    worldSpan = Math.max(12.5, spanX, spanZ);
+  } else if (worldState.world === 'heap') {
+    if (worldState.mode === 'median' && worldState.secondaryItems) {
+      worldSpan = 16.5;
+    } else {
+      const count = Math.max(4, worldState.items.length);
+      const railSpan = count * 1.4 + 3.2;
+      const pyramidSpan = count > 7 ? 16.0 : 13.8;
+      worldSpan = Math.max(13.5, railSpan, pyramidSpan);
+    }
   }
 
   const rawZoom = (minDim / worldSpan) * 0.88 * aspectFactor;

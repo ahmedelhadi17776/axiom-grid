@@ -3,6 +3,9 @@ import { persist } from 'zustand/middleware';
 import type {
   AnyWorldState,
   ArraysWorldState,
+  DPWorldState,
+  HashTableWorldState,
+  HeapWorldState,
   LevelDefinition,
   LinkedListWorldState,
   PathfindingAlgorithm,
@@ -41,6 +44,9 @@ import {
   evaluateLevel,
   recomputeTreeLayoutAndMetrics,
 } from '../engine/worlds/index';
+import { computeReadyCells, createDPSession } from '../engine/worlds/dpEngine';
+import { createHashTableSession } from '../engine/worlds/hashTableEngine';
+import { createHeapSession } from '../engine/worlds/heapEngine';
 import {
   ALL_LEVELS,
   LEVELS_BY_WORLD,
@@ -82,17 +88,27 @@ export function playAudioForEvent(event: SimEvent | null): void {
     case 'WRITE':
     case 'ROTATE_LEFT':
     case 'ROTATE_RIGHT':
+    case 'SIFT_UP':
+    case 'SIFT_DOWN':
+    case 'HEAPIFY':
       soundEngine.playSwap(event.pitchHint ?? 0.5);
       break;
     case 'LINK':
     case 'UNLINK':
     case 'INSERT_NODE':
+    case 'REHASH':
+    case 'EXTRACT_ROOT':
+    case 'DP_TRACE':
       soundEngine.playLink();
       break;
     case 'PROBE':
+    case 'DP_COMPUTE':
+    case 'HASH_PROBE':
       soundEngine.playStep(event.pitchHint ?? 0.65);
       break;
     case 'DELETE_NODE':
+    case 'COLLISION':
+    case 'TOMBSTONE':
       soundEngine.playStep(event.pitchHint ?? 0.3);
       break;
     case 'MEMORY_LEAK':
@@ -150,6 +166,21 @@ console.log('Path cost:', res.pathCost, 'Visited:', res.visitedCount);
 api.insert(42);
 const sorted = api.runTraversal('inorder');
 console.log('In-order harvest:', sorted.join(', '));
+`,
+  dp: `// Sandbox DP API: api.rows, api.cols, api.get(r, c), api.computeCell(r, c), api.traceOptimal(), api.runTabulation()
+const ans = api.runTabulation();
+console.log('Tabulation answer:', ans);
+`,
+  'hash-table': `// Sandbox Hash Table API: api.capacity, api.hash(k), api.insert(k, v), api.lookup(k), api.remove(k), api.rehash()
+api.insert(24, 'K24');
+api.insert(31, 'K31');
+console.log('Load factor:', Math.round(api.loadFactor() * 100) + '%');
+`,
+  heap: `// Sandbox Heap API: api.size(), api.peek(), api.insert(val), api.extractRoot(), api.heapify(), api.siftUp(i), api.siftDown(i)
+api.heapify();
+api.insert(9);
+const top = api.extractRoot();
+console.log('Extracted root:', top);
 `,
 };
 
@@ -296,6 +327,111 @@ function createRandomTreesState(): TreesWorldState {
   return nextState;
 }
 
+function createRandomDPState(): DPWorldState {
+  const rows = 4;
+  const cols = 4;
+  const blockedSets: Array<[number, number][]> = [
+    [[1, 1], [2, 2]],
+    [[1, 2], [2, 1]],
+    [[0, 2], [2, 1]],
+    [[1, 1], [3, 1]],
+  ];
+  const blocked = blockedSets[Math.floor(Math.random() * blockedSets.length)];
+  const blockedKey = new Set(blocked.map(([r, c]) => `${r},${c}`));
+  const cells: DPWorldState['cells'] = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (blockedKey.has(`${r},${c}`)) {
+        cells.push({ row: r, col: c, value: null, state: 'blocked' });
+      } else if (r === 0 && c === 0) {
+        cells.push({ row: r, col: c, value: 1, state: 'computed' });
+      } else {
+        cells.push({ row: r, col: c, value: null, state: 'empty' });
+      }
+    }
+  }
+  const next: DPWorldState = {
+    world: 'dp',
+    mode: 'grid-paths',
+    rows,
+    cols,
+    rowLabels: ['r0', 'r1', 'r2', 'r3'],
+    colLabels: ['c0', 'c1', 'c2', 'c3'],
+    cells,
+    activeCell: null,
+    activeDeps: [],
+    targetAnswer: 0,
+    tracebackShown: false,
+  };
+  computeReadyCells(next);
+  return next;
+}
+
+function createRandomHashTableState(
+  strategy: HashTableWorldState['strategy'] = 'linear'
+): HashTableWorldState {
+  const capacity = 7;
+  const base: HashTableWorldState = {
+    world: 'hash-table',
+    mode: 'sandbox',
+    strategy,
+    capacity,
+    buckets: Array.from({ length: capacity }, (_, index) => ({
+      index,
+      entry: null,
+      tombstone: false,
+      chain: [],
+      state: 'idle',
+    })),
+    pendingKeys: [],
+    lastHashBeam: null,
+    loadFactorThreshold: 0.72,
+    rehashCount: 0,
+    collisions: 0,
+  };
+  const session = createHashTableSession(base);
+  const used = new Set<number>();
+  const letters = ['A', 'B', 'C', 'D'];
+  while (used.size < 4) {
+    const k = 10 + Math.floor(Math.random() * 79);
+    if (!used.has(k)) {
+      const idx = used.size;
+      used.add(k);
+      session.insert(k, letters[idx]);
+    }
+  }
+  const finalState = session.getState();
+  finalState.lastHashBeam = null;
+  for (const b of finalState.buckets) {
+    b.state = 'idle';
+    if (b.entry) b.entry.state = 'idle';
+    for (const e of b.chain) e.state = 'idle';
+  }
+  return finalState;
+}
+
+function createRandomHeapState(kind: HeapWorldState['kind'] = 'min'): HeapWorldState {
+  const count = 6 + Math.floor(Math.random() * 2);
+  const used = new Set<number>();
+  const items: HeapWorldState['items'] = [];
+  while (items.length < count) {
+    const v = 10 + Math.floor(Math.random() * 86);
+    if (!used.has(v)) {
+      used.add(v);
+      items.push({ id: `h-${items.length}-${v}`, value: v, state: 'idle' });
+    }
+  }
+  return {
+    world: 'heap',
+    kind,
+    mode: 'sandbox',
+    items,
+    pendingQueue: [],
+    extracted: [],
+    selectedIndex: null,
+  };
+}
+
 export interface GameStoreState {
   // Navigation
   screen: ScreenId;
@@ -384,6 +520,13 @@ export interface GameStoreState {
   sandboxInsertTreeKey: (value?: number) => void;
   sandboxRunTreeTraversal: (order: TreeTraversalOrder) => void;
   sandboxAutoBalanceTree: () => void;
+  sandboxRunDPTabulation: () => void;
+  sandboxHashInsert: (key?: number) => void;
+  sandboxHashRehash: () => void;
+  sandboxHashToggleStrategy: () => void;
+  sandboxHeapInsert: (value?: number) => void;
+  sandboxHeapExtract: () => void;
+  sandboxHeapHeapify: () => void;
   isLevelUnlocked: (levelId: string) => boolean;
 }
 
@@ -1168,6 +1311,16 @@ export const useGameStore = create<GameStoreState>()(
           };
         } else if (world === 'trees') {
           nextState = createRandomTreesState();
+        } else if (world === 'dp') {
+          nextState = createRandomDPState();
+        } else if (world === 'hash-table') {
+          const curr = getCurrentState(state.timeline);
+          const strat = curr.world === 'hash-table' ? curr.strategy : 'linear';
+          nextState = createRandomHashTableState(strat);
+        } else if (world === 'heap') {
+          const curr = getCurrentState(state.timeline);
+          const kind = curr.world === 'heap' ? curr.kind : 'min';
+          nextState = createRandomHeapState(kind);
         } else {
           const base = cloneWorldState(
             SANDBOX_DEFAULTS['stacks-queues'] as StacksQueuesWorldState
@@ -1508,6 +1661,247 @@ export const useGameStore = create<GameStoreState>()(
           set({
             statusToast: {
               message: 'Tree is already AVL-balanced (|BF| <= 1).',
+              tone: 'info',
+            },
+          });
+          return;
+        }
+
+        set({
+          sandboxState: cloneWorldState(finalState),
+          timeline: createTimeline<AnyWorldState>(initial, events, {
+            speed: state.timeline.speed,
+            isPlaying: true,
+            startCursor: -1,
+          }),
+          metrics: createEmptyMetrics(),
+          statusToast: null,
+        });
+      },
+
+      sandboxRunDPTabulation: () => {
+        const state = get();
+        const current = getCurrentState(state.timeline);
+        if (current.world !== 'dp') return;
+        soundEngine.playSelect();
+
+        const initial = cloneWorldState(current);
+        const session = createDPSession(initial);
+        session.runTabulation();
+        const events = session.getEvents();
+        const finalState = session.getState();
+
+        if (events.length === 0) {
+          set({
+            statusToast: {
+              message: 'DP matrix is already fully tabulated.',
+              tone: 'info',
+            },
+          });
+          return;
+        }
+
+        set({
+          sandboxState: cloneWorldState(finalState),
+          timeline: createTimeline<AnyWorldState>(initial, events, {
+            speed: state.timeline.speed,
+            isPlaying: true,
+            startCursor: -1,
+          }),
+          metrics: createEmptyMetrics(),
+          statusToast: null,
+        });
+      },
+
+      sandboxHashInsert: (key?: number) => {
+        const state = get();
+        const current = getCurrentState(state.timeline);
+        if (current.world !== 'hash-table') return;
+
+        const existingKeys = new Set<number>();
+        for (const b of current.buckets) {
+          if (b.entry) existingKeys.add(b.entry.key);
+          for (const e of b.chain) existingKeys.add(e.key);
+        }
+
+        let k =
+          typeof key === 'number' && Number.isFinite(key)
+            ? Math.round(key)
+            : NaN;
+
+        if (!Number.isFinite(k)) {
+          for (let attempt = 0; attempt < 120; attempt++) {
+            const candidate = 10 + Math.floor(Math.random() * 86);
+            if (!existingKeys.has(candidate)) {
+              k = candidate;
+              break;
+            }
+          }
+        }
+
+        if (!Number.isFinite(k)) {
+          soundEngine.playError();
+          return;
+        }
+
+        soundEngine.playSelect();
+        const initial = cloneWorldState(current);
+        const session = createHashTableSession(initial);
+        session.insert(k, `V${k}`);
+        const events = session.getEvents();
+        const finalState = session.getState();
+
+        set({
+          sandboxState: cloneWorldState(finalState),
+          timeline: createTimeline<AnyWorldState>(initial, events, {
+            speed: state.timeline.speed,
+            isPlaying: events.length > 0,
+            startCursor: -1,
+          }),
+          metrics: createEmptyMetrics(),
+          statusToast: null,
+        });
+      },
+
+      sandboxHashRehash: () => {
+        const state = get();
+        const current = getCurrentState(state.timeline);
+        if (current.world !== 'hash-table') return;
+        if (current.capacity >= 20) {
+          soundEngine.playError();
+          set({
+            statusToast: { message: 'Max capacity (20) reached in Sandbox.', tone: 'info' },
+          });
+          return;
+        }
+
+        soundEngine.playSelect();
+        const initial = cloneWorldState(current);
+        const session = createHashTableSession(initial);
+        session.rehash();
+        const events = session.getEvents();
+        const finalState = session.getState();
+
+        set({
+          sandboxState: cloneWorldState(finalState),
+          timeline: createTimeline<AnyWorldState>(initial, events, {
+            speed: state.timeline.speed,
+            isPlaying: events.length > 0,
+            startCursor: -1,
+          }),
+          metrics: createEmptyMetrics(),
+          statusToast: null,
+        });
+      },
+
+      sandboxHashToggleStrategy: () => {
+        const state = get();
+        const current = getCurrentState(state.timeline);
+        if (current.world !== 'hash-table') return;
+        soundEngine.playSelect();
+
+        const nextStrategy = current.strategy === 'linear' ? 'chaining' : 'linear';
+        const initial = cloneWorldState(current);
+        const session = createHashTableSession(initial);
+        session.setStrategy(nextStrategy);
+        const finalState = session.getState();
+
+        set((s) => ({
+          sandboxState: cloneWorldState(finalState),
+          timeline: createTimeline<AnyWorldState>(finalState, [], {
+            speed: s.timeline.speed,
+          }),
+          metrics: createEmptyMetrics(),
+          statusToast: {
+            message: `Switched collision strategy to ${nextStrategy.toUpperCase()}.`,
+            tone: 'info',
+          },
+        }));
+      },
+
+      sandboxHeapInsert: (value?: number) => {
+        const state = get();
+        const current = getCurrentState(state.timeline);
+        if (current.world !== 'heap') return;
+        if (current.items.length >= 15) {
+          soundEngine.playError();
+          set({
+            statusToast: { message: 'Max 15 nodes in Heap Sandbox.', tone: 'info' },
+          });
+          return;
+        }
+
+        const val =
+          typeof value === 'number' && Number.isFinite(value)
+            ? Math.round(value)
+            : 10 + Math.floor(Math.random() * 86);
+
+        soundEngine.playSelect();
+        const initial = cloneWorldState(current);
+        const session = createHeapSession(initial);
+        session.insert(val);
+        const events = session.getEvents();
+        const finalState = session.getState();
+
+        set({
+          sandboxState: cloneWorldState(finalState),
+          timeline: createTimeline<AnyWorldState>(initial, events, {
+            speed: state.timeline.speed,
+            isPlaying: events.length > 0,
+            startCursor: -1,
+          }),
+          metrics: createEmptyMetrics(),
+          statusToast: null,
+        });
+      },
+
+      sandboxHeapExtract: () => {
+        const state = get();
+        const current = getCurrentState(state.timeline);
+        if (current.world !== 'heap') return;
+        if (current.items.length === 0) {
+          soundEngine.playError();
+          set({
+            statusToast: { message: 'Heap is empty.', tone: 'info' },
+          });
+          return;
+        }
+
+        soundEngine.playSelect();
+        const initial = cloneWorldState(current);
+        const session = createHeapSession(initial);
+        session.extractRoot();
+        const events = session.getEvents();
+        const finalState = session.getState();
+
+        set({
+          sandboxState: cloneWorldState(finalState),
+          timeline: createTimeline<AnyWorldState>(initial, events, {
+            speed: state.timeline.speed,
+            isPlaying: events.length > 0,
+            startCursor: -1,
+          }),
+          metrics: createEmptyMetrics(),
+          statusToast: null,
+        });
+      },
+
+      sandboxHeapHeapify: () => {
+        const state = get();
+        const current = getCurrentState(state.timeline);
+        if (current.world !== 'heap') return;
+
+        soundEngine.playSelect();
+        const initial = cloneWorldState(current);
+        const session = createHeapSession(initial);
+        session.heapify();
+        const events = session.getEvents();
+        const finalState = session.getState();
+
+        if (events.length === 0) {
+          set({
+            statusToast: {
+              message: `Already a valid ${current.kind.toUpperCase()}-HEAP.`,
               tone: 'info',
             },
           });

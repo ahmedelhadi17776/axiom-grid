@@ -60,6 +60,33 @@ const API_PILLS: Record<WorldId, Array<{ label: string; snippet: string }>> = {
     { label: "api.runTraversal('inorder')", snippet: "api.runTraversal('inorder');" },
     { label: 'api.getBalanceFactor(id)', snippet: 'api.getBalanceFactor(api.root())' },
   ],
+  dp: [
+    { label: 'api.rows / cols', snippet: 'api.rows' },
+    { label: 'api.get(r, c)', snippet: 'api.get(0, 0)' },
+    { label: 'api.set(r, c, v)', snippet: 'api.set(0, 2, 2);' },
+    { label: 'api.computeCell(r, c)', snippet: 'api.computeCell(0, 2);' },
+    { label: 'api.traceOptimal()', snippet: 'api.traceOptimal();' },
+    { label: 'api.runTabulation()', snippet: 'api.runTabulation();' },
+  ],
+  'hash-table': [
+    { label: 'api.hash(k)', snippet: 'api.hash(24)' },
+    { label: 'api.loadFactor()', snippet: 'api.loadFactor()' },
+    { label: 'api.insert(k, v)', snippet: "api.insert(24, 'A');" },
+    { label: 'api.lookup(k)', snippet: 'api.lookup(24)' },
+    { label: 'api.remove(k, true)', snippet: 'api.remove(24, true);' },
+    { label: 'api.rehash()', snippet: 'api.rehash();' },
+    { label: 'api.markPair(a, b)', snippet: 'api.markPair(35, 19);' },
+  ],
+  heap: [
+    { label: 'api.size()', snippet: 'api.size()' },
+    { label: 'api.peek()', snippet: 'api.peek()' },
+    { label: 'api.insert(val)', snippet: 'api.insert(12);' },
+    { label: 'api.extractRoot()', snippet: 'api.extractRoot()' },
+    { label: 'api.heapify()', snippet: 'api.heapify();' },
+    { label: 'api.siftUp(i)', snippet: 'api.siftUp(api.size() - 1);' },
+    { label: 'api.siftDown(i)', snippet: 'api.siftDown(0);' },
+    { label: 'api.insertDual(v)', snippet: 'api.insertDual(30);' },
+  ],
 };
 
 export const CodeDrawer: React.FC = () => {
